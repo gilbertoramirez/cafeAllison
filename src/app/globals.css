@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-cafe-50: #faf6f1;
+  --color-cafe-100: #f1e7da;
+  --color-cafe-200: #e2cdb3;
+  --color-cafe-300: #cfac85;
+  --color-cafe-500: #a0703f;
+  --color-cafe-600: #85582d;
+  --color-cafe-700: #6b4423;
+  --color-cafe-800: #4f311a;
+  --color-cafe-900: #3b2416;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-cafe-50);
+  color: #24170e;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-cafe-800 text-white hover:bg-cafe-900;
+}
+@utility btn-secondary {
+  @apply btn border border-cafe-200 bg-white text-cafe-900 hover:bg-cafe-100;
+}
+@utility btn-danger {
+  @apply btn bg-red-600 text-white hover:bg-red-700;
+}
+@utility btn-whatsapp {
+  @apply btn bg-[#25D366] text-white hover:bg-[#1ebe5a];
+}
+@utility input {
+  @apply w-full rounded-lg border border-cafe-200 bg-white px-3 py-2 text-sm outline-none focus:border-cafe-500 focus:ring-2 focus:ring-cafe-200;
+}
+@utility label {
+  @apply mb-1 block text-xs font-medium text-cafe-700;
+}
+@utility card {
+  @apply rounded-xl border border-cafe-100 bg-white p-4 shadow-sm;
+}
+@utility badge {
+  @apply inline-block rounded-full px-2 py-0.5 text-xs font-medium;
+}
+@utility data-table {
+  @apply w-full text-left text-sm;
+  & th {
+    @apply border-b border-cafe-100 px-2 py-2 text-xs font-medium tracking-wide text-cafe-600 uppercase;
+  }
+  & td {
+    @apply border-b border-cafe-50 px-2 py-2 align-top;
+  }
+}
