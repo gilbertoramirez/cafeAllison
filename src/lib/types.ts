@@ -1,6 +1,8 @@
 export type Product = {
   id: number;
   name: string;
+  size: string;
+  available_days: string;
   description: string;
   category: string;
   price: number;
@@ -97,3 +99,23 @@ export const EXPENSE_CATEGORIES: Record<string, string> = {
   impuestos: "Impuestos y comisiones",
   otros: "Otros",
 };
+
+export const WEEKDAYS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+/** "Capuchino Clásico (M 12oz)" */
+export function productLabel(p: { name: string; size?: string }) {
+  return p.size ? `${p.name} (${p.size})` : p.name;
+}
+
+/** Días en que se vende ("5,6" = vie y sáb). Vacío = todos los días. */
+export function parseDays(days: string): number[] {
+  return days
+    .split(",")
+    .map((d) => Number(d))
+    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+}
+
+export function daysLabel(days: string): string {
+  const list = parseDays(days);
+  return list.length === 0 || list.length === 7 ? "" : list.map((d) => WEEKDAYS[d]).join(", ");
+}

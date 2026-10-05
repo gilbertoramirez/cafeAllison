@@ -69,6 +69,7 @@ export async function POST(req: Request) {
       cashGiven: num(body.cashGiven) !== null ? Math.round(num(body.cashGiven)! * 100) : null,
       deliveryFee: settings.delivery_fee,
       minSubtotal: deliveryType === "domicilio" ? settings.min_delivery_order : 0,
+      enforceDays: true,
     });
   } catch (e) {
     if (e instanceof OrderError) return bad(e.message);

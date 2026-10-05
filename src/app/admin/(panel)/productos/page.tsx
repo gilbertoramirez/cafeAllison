@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Field, PageTitle } from "@/components/admin/ui";
 import { all, get } from "@/lib/db";
 import { centsToInput, money } from "@/lib/format";
-import type { Product } from "@/lib/types";
+import { daysLabel, parseDays, productLabel, WEEKDAYS, type Product } from "@/lib/types";
 import { saveProduct, toggleProduct } from "../../actions";
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ id?: string; nuevo?: string }> }) {
@@ -19,9 +19,12 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
       {showForm && (
         <form action={saveProduct} className="card grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <input type="hidden" name="id" value={editing?.id ?? ""} />
-          <h2 className="font-semibold sm:col-span-2 lg:col-span-4">{editing ? `Editar: ${editing.name}` : "Nuevo producto"}</h2>
+          <h2 className="font-semibold sm:col-span-2 lg:col-span-4">{editing ? `Editar: ${productLabel(editing)}` : "Nuevo producto"}</h2>
           <Field label="Nombre" className="lg:col-span-2">
             <input name="name" className="input" required defaultValue={editing?.name} />
+          </Field>
+          <Field label="Tamaño (opcional)" hint="Ej. CH 8oz. Los tamaños con el mismo nombre se agrupan en la tienda.">
+            <input name="size" className="input" defaultValue={editing?.size} />
           </Field>
           <Field label="Categoría">
             <input name="category" className="input" list="cats" required defaultValue={editing?.category} />
@@ -58,6 +61,17 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           <Field label="Avisar cuando queden">
             <input name="min_stock" type="number" min="0" className="input" defaultValue={editing?.min_stock ?? 5} />
           </Field>
+          <fieldset className="sm:col-span-2 lg:col-span-4">
+            <legend className="label">Días que se vende en línea (sin marcar = todos)</legend>
+            <div className="flex flex-wrap gap-3 text-sm">
+              {WEEKDAYS.map((d, i) => (
+                <label key={d} className="flex items-center gap-1">
+                  <input type="checkbox" name="days" value={i} defaultChecked={parseDays(editing?.available_days ?? "").includes(i)} />
+                  {d}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="active" defaultChecked={editing ? Boolean(editing.active) : true} />
             Visible en el menú
@@ -90,7 +104,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
               return (
                 <tr key={p.id} className={p.active ? "" : "opacity-50"}>
                   <td className="font-medium">
-                    {p.name}
+                    {productLabel(p)}
+                    {p.available_days && <span className="badge ml-2 bg-amber-50 text-amber-800">{daysLabel(p.available_days)}</span>}
                     {!p.active && <span className="badge ml-2 bg-gray-100">Oculto</span>}
                   </td>
                   <td>{p.category}</td>

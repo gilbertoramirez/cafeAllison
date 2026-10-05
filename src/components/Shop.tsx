@@ -3,10 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { money } from "@/lib/format";
+import { productLabel } from "@/lib/types";
 
 export type ShopProduct = {
   id: number;
   name: string;
+  size: string;
+  /** p.ej. "Solo Vie, Sáb" cuando hoy no se vende; null si está disponible */
+  notToday: string | null;
   description: string;
   category: string;
   price: number;
@@ -62,7 +66,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
       const valid: Cart = {};
       for (const [id, q] of Object.entries(c)) {
         const p = products.find((x) => x.id === Number(id));
-        if (p && !p.soldOut && q > 0) valid[p.id] = Math.min(q, p.maxQty);
+        if (p && !p.soldOut && !p.notToday && q > 0) valid[p.id] = Math.min(q, p.maxQty);
       }
       setCart(valid);
       const cust = JSON.parse(localStorage.getItem(CUSTOMER_KEY) || "{}");
@@ -84,13 +88,16 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
 
   const categories = useMemo(() => ["Todo", ...Array.from(new Set(products.map((p) => p.category)))], [products]);
   const visible = category === "Todo" ? products : products.filter((p) => p.category === category);
+  // categoría -> nombre -> tamaños
   const grouped = useMemo(() => {
-    const m = new Map<string, ShopProduct[]>();
+    const m = new Map<string, Map<string, ShopProduct[]>>();
     for (const p of visible) {
-      if (!m.has(p.category)) m.set(p.category, []);
-      m.get(p.category)!.push(p);
+      if (!m.has(p.category)) m.set(p.category, new Map());
+      const byName = m.get(p.category)!;
+      if (!byName.has(p.name)) byName.set(p.name, []);
+      byName.get(p.name)!.push(p);
     }
-    return [...m.entries()];
+    return [...m.entries()].map(([cat, byName]) => [cat, [...byName.values()]] as const);
   }, [visible]);
 
   const lines = Object.entries(cart)
@@ -183,7 +190,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
             {lines.map((l) => (
               <div key={l.p.id} className="flex items-center justify-between gap-2 text-sm">
                 <span>
-                  {l.qty} × {l.p.name}
+                  {l.qty} × {productLabel(l.p)}
                 </span>
                 <span className="font-medium">{money(l.p.price * l.qty)}</span>
               </div>
@@ -353,37 +360,9 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
         <section key={cat} className="mt-4">
           <h2 className="mb-3 text-lg font-semibold text-cafe-800">{cat}</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {items.map((p) => {
-              const q = cart[p.id] ?? 0;
-              return (
-                <article key={p.id} className="card flex gap-3">
-                  {p.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.image_url} alt="" className="h-20 w-20 shrink-0 rounded-lg object-cover" />
-                  ) : (
-                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-cafe-100 text-3xl">
-                      ☕
-                    </div>
-                  )}
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <h3 className="font-medium">{p.name}</h3>
-                    <p className="line-clamp-2 text-xs text-cafe-600">{p.description}</p>
-                    <div className="mt-auto flex items-center justify-between pt-2">
-                      <span className="font-semibold">{money(p.price)}</span>
-                      {p.soldOut ? (
-                        <span className="badge bg-cafe-100 text-cafe-600">Agotado</span>
-                      ) : !settings.open ? null : q === 0 ? (
-                        <button className="btn-primary px-3 py-1" onClick={() => add(p, 1)}>
-                          Agregar
-                        </button>
-                      ) : (
-                        <Stepper qty={q} onMinus={() => add(p, -1)} onPlus={() => add(p, 1)} canPlus={q < p.maxQty} />
-                      )}
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+            {items.map((variants) => (
+              <ProductCard key={variants[0].id} variants={variants} cart={cart} open={settings.open} add={add} />
+            ))}
           </div>
         </section>
       ))}
@@ -403,7 +382,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
             <div className="mx-auto mt-3 max-h-64 max-w-5xl space-y-2 overflow-y-auto">
               {lines.map((l) => (
                 <div key={l.p.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="flex-1">{l.p.name}</span>
+                  <span className="flex-1">{productLabel(l.p)}</span>
                   <Stepper
                     qty={l.qty}
                     onMinus={() => add(l.p, -1)}
@@ -418,6 +397,74 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
         </div>
       )}
     </main>
+  );
+}
+
+function ProductCard({
+  variants,
+  cart,
+  open,
+  add,
+}: {
+  variants: ShopProduct[];
+  cart: Cart;
+  open: boolean;
+  add: (p: ShopProduct, delta: number) => void;
+}) {
+  const [selectedId, setSelectedId] = useState(variants[0].id);
+  const p = variants.find((v) => v.id === selectedId) ?? variants[0];
+  const q = cart[p.id] ?? 0;
+  const inCart = variants.reduce((a, v) => a + (cart[v.id] ?? 0), 0);
+  return (
+    <article className="card flex gap-3">
+      {p.image_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={p.image_url} alt="" className="h-20 w-20 shrink-0 rounded-lg object-cover" />
+      ) : (
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-cafe-100 text-3xl">☕</div>
+      )}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <h3 className="font-medium">
+          {p.name}
+          {inCart > q && <span className="badge ml-1 bg-cafe-100 text-cafe-700">{inCart} en tu pedido</span>}
+        </h3>
+        {p.description && <p className="line-clamp-2 text-xs text-cafe-600">{p.description}</p>}
+        {variants.length > 1 ? (
+          <div className="mt-2 flex flex-wrap gap-1" role="radiogroup" aria-label="Tamaño">
+            {variants.map((v) => (
+              <button
+                key={v.id}
+                role="radio"
+                aria-checked={v.id === p.id}
+                onClick={() => setSelectedId(v.id)}
+                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                  v.id === p.id ? "bg-cafe-800 text-white" : "bg-cafe-50 text-cafe-800 ring-1 ring-cafe-200"
+                }`}
+              >
+                {v.size}
+                {cart[v.id] ? ` ·${cart[v.id]}` : ""}
+              </button>
+            ))}
+          </div>
+        ) : (
+          p.size && <p className="mt-1 text-xs text-cafe-600">{p.size}</p>
+        )}
+        <div className="mt-auto flex items-center justify-between pt-2">
+          <span className="font-semibold">{money(p.price)}</span>
+          {p.notToday ? (
+            <span className="badge bg-amber-50 text-amber-800">{p.notToday}</span>
+          ) : p.soldOut ? (
+            <span className="badge bg-cafe-100 text-cafe-600">Agotado</span>
+          ) : !open ? null : q === 0 ? (
+            <button className="btn-primary px-3 py-1" onClick={() => add(p, 1)}>
+              Agregar
+            </button>
+          ) : (
+            <Stepper qty={q} onMinus={() => add(p, -1)} onPlus={() => add(p, 1)} canPlus={q < p.maxQty} />
+          )}
+        </div>
+      </div>
+    </article>
   );
 }
 

@@ -1,7 +1,7 @@
 import { Field, PageTitle } from "@/components/admin/ui";
 import { all } from "@/lib/db";
 import { centsToInput, dateTime, money } from "@/lib/format";
-import type { Product, Supply } from "@/lib/types";
+import { productLabel, type Product, type Supply } from "@/lib/types";
 import { adjustStock, deleteSupply, restock, saveSupply } from "../../actions";
 
 type Movement = {
@@ -26,7 +26,7 @@ export default async function InventoryPage() {
     all<Product>("SELECT * FROM products WHERE track_stock = 1 ORDER BY active DESC, name"),
     all<Supply>("SELECT * FROM supplies ORDER BY name"),
     all<Movement>(
-      `SELECT m.*, CASE m.item_type WHEN 'product' THEN p.name ELSE s.name END AS name
+      `SELECT m.*, CASE m.item_type WHEN 'product' THEN p.name || CASE WHEN p.size <> '' THEN ' (' || p.size || ')' ELSE '' END ELSE s.name END AS name
        FROM inventory_movements m
        LEFT JOIN products p ON m.item_type = 'product' AND p.id = m.item_id
        LEFT JOIN supplies s ON m.item_type = 'supply' AND s.id = m.item_id
@@ -45,7 +45,7 @@ export default async function InventoryPage() {
         <optgroup label="Productos del menú">
           {products.map((p) => (
             <option key={`p${p.id}`} value={`product:${p.id}`}>
-              {p.name} (hay {p.stock})
+              {productLabel(p)} (hay {p.stock})
             </option>
           ))}
         </optgroup>
@@ -139,7 +139,7 @@ export default async function InventoryPage() {
             <tbody>
               {products.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.name}</td>
+                  <td>{productLabel(p)}</td>
                   <td className={`text-right tabular-nums ${p.stock <= p.min_stock ? "font-semibold text-red-700" : ""}`}>{p.stock}</td>
                   <td className="text-right tabular-nums">{p.min_stock}</td>
                   <td className="text-right tabular-nums">{money(p.cost)}</td>

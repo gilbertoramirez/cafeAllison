@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { all, get, run, transaction } from "./db";
+import { availableToday } from "./format";
 import type { Order, OrderItem, OrderStatus, PaymentMethod, Product } from "./types";
+import { daysLabel, productLabel } from "./types";
 
 export class OrderError extends Error {}
 
@@ -21,6 +23,8 @@ export type NewOrderInput = {
   cashGiven?: number | null;
   deliveryFee?: number;
   minSubtotal?: number;
+  /** Pedidos en línea: respeta los días de venta de cada producto. */
+  enforceDays?: boolean;
   /** En mostrador: rechaza si el efectivo recibido no cubre el total. */
   cashMustCover?: boolean;
 };
@@ -53,8 +57,11 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
     for (const [id, qty] of merged) {
       const p = products.get(id);
       if (!p || !p.active) throw new OrderError("Uno de los productos ya no está disponible.");
+      if (input.enforceDays && !availableToday(p.available_days)) {
+        throw new OrderError(`"${productLabel(p)}" solo está disponible: ${daysLabel(p.available_days)}.`);
+      }
       if (p.track_stock && p.stock < qty) {
-        throw new OrderError(`Solo quedan ${Math.max(p.stock, 0)} de "${p.name}".`);
+        throw new OrderError(`Solo quedan ${Math.max(p.stock, 0)} de "${productLabel(p)}".`);
       }
       subtotal += p.price * qty;
       lines.push({ p, qty });
@@ -102,7 +109,7 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
       await q("INSERT INTO order_items (order_id, product_id, name, unit_price, unit_cost, qty) VALUES (?,?,?,?,?,?)", [
         newId,
         p.id,
-        p.name,
+        productLabel(p),
         p.price,
         p.cost,
         qty,

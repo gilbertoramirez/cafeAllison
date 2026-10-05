@@ -86,3 +86,14 @@ export function waNumber(phone: string): string {
   if (d.length === 10) return "52" + d;
   return d;
 }
+
+/** Día de la semana local (0 = domingo). */
+export function localWeekday(d: Date = new Date()): number {
+  const w = new Intl.DateTimeFormat("en-US", { timeZone: TIMEZONE, weekday: "short" }).format(d);
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(w);
+}
+
+export function availableToday(days: string, d: Date = new Date()): boolean {
+  if (!days.trim()) return true;
+  return days.split(",").map(Number).includes(localWeekday(d));
+}

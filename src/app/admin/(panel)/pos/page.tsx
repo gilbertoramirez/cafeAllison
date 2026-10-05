@@ -1,5 +1,5 @@
 import { all } from "@/lib/db";
-import type { Product } from "@/lib/types";
+import { productLabel, type Product } from "@/lib/types";
 import PosTerminal from "@/components/admin/PosTerminal";
 
 export default async function PosPage() {
@@ -8,7 +8,7 @@ export default async function PosPage() {
     <PosTerminal
       products={products.map((p) => ({
         id: p.id,
-        name: p.name,
+        name: productLabel(p),
         category: p.category,
         price: p.price,
         maxQty: p.track_stock ? Math.max(p.stock, 0) : 999,

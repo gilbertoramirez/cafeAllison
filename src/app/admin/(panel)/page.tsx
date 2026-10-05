@@ -4,7 +4,7 @@ import { financeSummary, pendingExpenses, rangeFor, salesSummary } from "@/lib/f
 import { dateTime, localDate, money } from "@/lib/format";
 import { orderCode } from "@/lib/orders";
 import type { Order, Product, Supply } from "@/lib/types";
-import { EXPENSE_CATEGORIES, ORDER_STATUS_LABEL } from "@/lib/types";
+import { EXPENSE_CATEGORIES, ORDER_STATUS_LABEL, productLabel } from "@/lib/types";
 import { PageTitle, Stat } from "@/components/admin/ui";
 
 export default async function Dashboard() {
@@ -131,7 +131,7 @@ export default async function Dashboard() {
             <div className="flex flex-wrap gap-2 text-sm">
               {lowProducts.map((p) => (
                 <span key={`p${p.id}`} className="badge bg-red-50 text-red-700">
-                  {p.name}: {p.stock}
+                  {productLabel(p)}: {p.stock}
                 </span>
               ))}
               {lowSupplies.map((s) => (

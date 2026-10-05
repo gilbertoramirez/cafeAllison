@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { all } from "@/lib/db";
 import { getSettings, stripeEnabled } from "@/lib/settings";
-import type { Product } from "@/lib/types";
+import { availableToday } from "@/lib/format";
+import { daysLabel, type Product } from "@/lib/types";
 import Shop from "@/components/Shop";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,8 @@ export default async function Home() {
         products={products.map((p) => ({
           id: p.id,
           name: p.name,
+          size: p.size,
+          notToday: availableToday(p.available_days) ? null : `Solo ${daysLabel(p.available_days)}`,
           description: p.description,
           category: p.category,
           price: p.price,

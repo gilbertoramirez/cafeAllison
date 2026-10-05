@@ -8,7 +8,7 @@ import { addDays, addMonths, localDate, toCents } from "@/lib/format";
 import { createOrder, markOrderPaid, OrderError, setOrderStatus } from "@/lib/orders";
 import { setSetting } from "@/lib/settings";
 import type { Expense, OrderStatus, PaymentMethod } from "@/lib/types";
-import { EXPENSE_CATEGORIES, ORDER_STATUS_LABEL } from "@/lib/types";
+import { EXPENSE_CATEGORIES, ORDER_STATUS_LABEL, productLabel } from "@/lib/types";
 
 function done() {
   revalidatePath("/", "layout");
@@ -99,8 +99,14 @@ export async function saveProduct(formData: FormData) {
   const id = int(formData, "id");
   const name = str(formData, "name");
   if (!name) return;
+  const days = formData
+    .getAll("days")
+    .map(Number)
+    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
   const values = [
     name,
+    str(formData, "size"),
+    days.length === 7 ? "" : days.join(","),
     str(formData, "description"),
     str(formData, "category") || "General",
     toCents(formData.get("price")),
@@ -113,13 +119,13 @@ export async function saveProduct(formData: FormData) {
   ];
   if (id) {
     await run(
-      `UPDATE products SET name=?, description=?, category=?, price=?, cost=?, track_stock=?, min_stock=?, image_url=?, active=?, sort=? WHERE id=?`,
+      `UPDATE products SET name=?, size=?, available_days=?, description=?, category=?, price=?, cost=?, track_stock=?, min_stock=?, image_url=?, active=?, sort=? WHERE id=?`,
       [...values, id],
     );
   } else {
     await run(
-      `INSERT INTO products (name, description, category, price, cost, track_stock, min_stock, image_url, active, sort, stock)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO products (name, size, available_days, description, category, price, cost, track_stock, min_stock, image_url, active, sort, stock)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [...values, int(formData, "stock")],
     );
   }
@@ -161,7 +167,7 @@ export async function restock(formData: FormData) {
   if (!id || qty <= 0) return;
 
   const table = type === "product" ? "products" : "supplies";
-  const item = await get<{ name: string }>(`SELECT name FROM ${table} WHERE id = ?`, [id]);
+  const item = await get<{ name: string; size?: string }>(`SELECT * FROM ${table} WHERE id = ?`, [id]);
   if (!item) return;
 
   await transaction(async (q) => {
@@ -185,7 +191,7 @@ export async function restock(formData: FormData) {
     await addExpense({
       date: localDate(),
       category: "resurtido",
-      description: `Resurtido: ${qty} × ${item.name}`,
+      description: `Resurtido: ${qty} × ${productLabel(item)}`,
       amount: totalCost,
       status: formData.get("expense_pending") ? "pendiente" : "pagado",
     });

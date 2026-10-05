@@ -97,6 +97,8 @@ CREATE TABLE IF NOT EXISTS products (
   sort INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
 );
+ALTER TABLE products ADD COLUMN IF NOT EXISTS size TEXT NOT NULL DEFAULT '';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS available_days TEXT NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS supplies (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -167,24 +169,65 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `;
 
-// Menú de ejemplo (precios en centavos). Se puede editar desde Admin > Menú.
-const SEED_PRODUCTS: [string, string, string, number, number, number, number][] = [
-  // name, description, category, price, cost, track_stock, stock
-  ["Espresso", "Shot doble de café de especialidad", "Café caliente", 3500, 800, 0, 0],
-  ["Americano", "Espresso con agua caliente, 12 oz", "Café caliente", 4000, 900, 0, 0],
-  ["Capuchino", "Espresso, leche vaporizada y espuma, 12 oz", "Café caliente", 5500, 1500, 0, 0],
-  ["Latte", "Espresso con leche vaporizada, 12 oz", "Café caliente", 5500, 1500, 0, 0],
-  ["Mocha", "Latte con chocolate", "Café caliente", 6000, 1800, 0, 0],
-  ["Frappé de café", "Café, leche, hielo y crema batida, 16 oz", "Bebidas frías", 7000, 2200, 0, 0],
-  ["Cold brew", "Café extraído en frío por 18 h, 16 oz", "Bebidas frías", 6000, 1500, 0, 0],
-  ["Chai latte", "Té chai especiado con leche", "Té y otros", 5500, 1600, 0, 0],
-  ["Chocolate caliente", "Chocolate de mesa con leche", "Té y otros", 5000, 1400, 0, 0],
-  ["Croissant", "Croissant de mantequilla", "Panadería", 4000, 1500, 1, 20],
-  ["Concha", "Pan dulce tradicional", "Panadería", 2500, 800, 1, 20],
-  ["Galleta de chispas", "Galleta grande de chocolate", "Panadería", 3000, 900, 1, 20],
-  ["Sándwich de pavo", "Pan artesanal, pavo, queso panela, vegetales", "Comida", 8500, 3500, 1, 10],
-  ["Chilaquiles", "Verdes o rojos, con crema, queso y huevo", "Comida", 9500, 3500, 0, 0],
+// Menú de Café Allison (precios en pesos). Se puede editar desde Admin > Menú.
+// Cada tamaño es un producto; la tienda los agrupa por nombre.
+type SeedItem = { name: string; category: string; description?: string; sizes: [string, number][]; days?: string };
+const FLAVOR = "Indica el sabor en las notas del pedido.";
+const CH = "CH 8oz";
+const M = "M 12oz";
+const G = "G 16oz";
+const MENU: SeedItem[] = [
+  // Café
+  { category: "Café", name: "Espresso", sizes: [[CH, 25]] },
+  { category: "Café", name: "Americano", sizes: [[M, 30]] },
+  { category: "Café", name: "Capuchino Clásico", sizes: [[CH, 40], [M, 45], [G, 50]] },
+  { category: "Café", name: "Capuchino de sabor", description: FLAVOR, sizes: [[CH, 45], [M, 50], [G, 55]] },
+  { category: "Café", name: "Latte Clásico", sizes: [[CH, 40], [M, 45], [G, 50]] },
+  { category: "Café", name: "Latte de sabor", description: FLAVOR, sizes: [[CH, 45], [M, 50], [G, 55]] },
+  // Sin café
+  { category: "Sin Café", name: "Chocolate", sizes: [[CH, 35], [M, 40], [G, 45]] },
+  { category: "Sin Café", name: "Tisana Frutal caliente", description: FLAVOR, sizes: [[M, 40], [G, 50]] },
+  { category: "Sin Café", name: "Soda Italiana", description: FLAVOR, sizes: [[G, 55]] },
+  // Barra fría
+  { category: "Barra Fría", name: "Tisana Frutal fría", description: FLAVOR, sizes: [[M, 40], [G, 50]] },
+  { category: "Barra Fría", name: "Latte Clásico frío", sizes: [[M, 45], [G, 50]] },
+  { category: "Barra Fría", name: "Latte frío de sabor", description: FLAVOR, sizes: [[M, 50], [G, 55]] },
+  { category: "Barra Fría", name: "Frappé Clásico", sizes: [[M, 50], [G, 55]] },
+  { category: "Barra Fría", name: "Frappé de sabor", description: FLAVOR, sizes: [[M, 55], [G, 60]] },
+  // Frappés especiales
+  ...["Gansito", "Magnum", "Mordisco", "Oreo", "Pingüino"].map(
+    (n): SeedItem => ({ category: "Frappés Especiales", name: `Frappé ${n}`, sizes: [[G, 85]] }),
+  ),
+  // Malteadas
+  { category: "Malteadas", name: "Malteada de Oreo", sizes: [[G, 55]] },
+  { category: "Malteadas", name: "Malteada de Fresa", sizes: [[G, 55]] },
+  // Postres
+  { category: "Postres", name: "Rol Maple Individual", sizes: [["", 35]] },
+  { category: "Postres", name: "Mega Rol", sizes: [["", 45]] },
+  { category: "Postres", name: "Volován", sizes: [["", 20]] },
+  { category: "Postres", name: "Croissant dulce", sizes: [["", 35]] },
+  { category: "Postres", name: "Galleta Estilo NY", sizes: [["", 45]] },
+  { category: "Postres", name: "Galleta Casera", sizes: [["", 25]] },
+  { category: "Postres", name: "Galletas de Mantequilla", description: "Bolsa con 6 galletas", sizes: [["", 50]] },
+  { category: "Postres", name: "Galleta de avena", sizes: [["", 7]] },
+  { category: "Postres", name: "Affogato", sizes: [["", 45]] },
+  // Snacks
+  { category: "Snacks", name: "Baguette de Pechuga de Pollo", sizes: [["", 85]] },
+  { category: "Snacks", name: "Baguette de Jamón de Pavo", sizes: [["", 65]] },
+  { category: "Snacks", name: "Sándwich de Pechuga de Pollo", sizes: [["", 70]] },
+  { category: "Snacks", name: "Sándwich de Jamón de Pavo", sizes: [["", 40]] },
+  { category: "Snacks", name: "Pan Pizza", sizes: [["", 40]] },
+  // Combos
+  { category: "Combos", name: "Pan Pizza + Coca 355ml", sizes: [["", 60]] },
+  { category: "Combos", name: "Pan Pizza + Tisana", sizes: [["", 75]] },
+  { category: "Combos", name: "Pan Pizza + Soda Italiana", sizes: [["", 85]] },
+  { category: "Combos", name: "Rol individual + Café 16oz", sizes: [["", 80]] },
+  { category: "Combos", name: "Mega Rol + 2 cafés 16oz", sizes: [["", 140]] },
+  // Snacks especiales: viernes (5) y sábado (6)
+  { category: "Snacks Especiales", name: "Boneless", description: "Individual (250 gramos). Viernes y sábados.", sizes: [["", 110]], days: "5,6" },
+  { category: "Snacks Especiales", name: "Palomitas de pollo", description: "Individual (250 gramos). Viernes y sábados.", sizes: [["", 100]], days: "5,6" },
 ];
+const MENU_VERSION = "allison-1";
 
 const DEFAULT_SETTINGS: Record<string, string> = {
   business_name: "Café Allison",
@@ -202,14 +245,27 @@ async function init(b: Backend) {
     // Evita que dos instancias creen las tablas al mismo tiempo
     await q("SELECT pg_advisory_xact_lock(7212026)");
     for (const stmt of SCHEMA.split(";").map((s) => s.trim()).filter(Boolean)) await q(stmt);
-    const [{ n }] = await q<{ n: number }>("SELECT COUNT(*) AS n FROM products");
-    if (n === 0) {
-      for (const [i, [name, description, category, price, cost, track, stock]] of SEED_PRODUCTS.entries()) {
-        await q(
-          "INSERT INTO products (name, description, category, price, cost, track_stock, stock, min_stock, sort) VALUES (?,?,?,?,?,?,?,?,?)",
-          [name, description, category, price, cost, track, stock, track ? 5 : 0, i],
-        );
+    // Carga el menú de Café Allison si aún no se ha cargado y no hay ventas registradas
+    const [ver] = await q<{ value: string }>("SELECT value FROM settings WHERE key = 'menu_version'");
+    if (ver?.value !== MENU_VERSION) {
+      const [{ n }] = await q<{ n: number }>("SELECT COUNT(*) AS n FROM order_items");
+      if (n === 0) {
+        await q("DELETE FROM inventory_movements WHERE item_type = 'product'");
+        await q("DELETE FROM products");
+        let sort = 0;
+        for (const item of MENU) {
+          for (const [size, pesos] of item.sizes) {
+            await q(
+              "INSERT INTO products (name, size, description, category, price, cost, available_days, sort) VALUES (?,?,?,?,?,0,?,?)",
+              [item.name, size, item.description ?? "", item.category, pesos * 100, item.days ?? "", sort++],
+            );
+          }
+        }
       }
+      await q(
+        "INSERT INTO settings (key, value) VALUES ('menu_version', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+        [MENU_VERSION],
+      );
     }
     for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) {
       await q("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING", [k, v]);
