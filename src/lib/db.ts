@@ -1,7 +1,11 @@
 import { createClient, type Client, type InArgs, type Row } from "@libsql/client";
 
 // Local: archivo SQLite (data/cafe.db). Producción: Turso (DATABASE_URL=libsql://... + DATABASE_AUTH_TOKEN).
-const url = process.env.DATABASE_URL || "file:data/cafe.db";
+// En Vercel sin DATABASE_URL se usa /tmp (único lugar con escritura), pero esos datos se pierden: solo sirve de demo.
+const url = process.env.DATABASE_URL || (process.env.VERCEL ? "file:/tmp/cafe.db" : "file:data/cafe.db");
+
+/** true cuando los datos no sobreviven a reinicios del servidor (Vercel sin Turso). */
+export const isEphemeralDb = !process.env.DATABASE_URL && Boolean(process.env.VERCEL);
 
 const globalForDb = globalThis as unknown as { __db?: Client; __dbReady?: Promise<void> };
 

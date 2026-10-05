@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/auth";
+import { isEphemeralDb } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { logout } from "../actions";
 import AdminNav from "@/components/admin/AdminNav";
@@ -22,7 +23,15 @@ export default async function PanelLayout({ children }: { children: React.ReactN
         </div>
         <AdminNav />
       </aside>
-      <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
+      <main className="min-w-0 flex-1 p-4 md:p-6">
+        {isEphemeralDb && (
+          <p className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            ⚠️ Modo demo: la base de datos es temporal y los datos se pueden borrar en cualquier momento. Conecta Turso
+            (variables <code>DATABASE_URL</code> y <code>DATABASE_AUTH_TOKEN</code>) antes de usarlo con ventas reales.
+          </p>
+        )}
+        {children}
+      </main>
     </div>
   );
 }
