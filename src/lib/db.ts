@@ -142,6 +142,14 @@ CREATE TABLE IF NOT EXISTS orders (
   paid_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS postal_code TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS delivery_zones (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  postal_codes TEXT NOT NULL DEFAULT '',
+  fee INTEGER NOT NULL DEFAULT 0,
+  sort INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS order_items (
   id SERIAL PRIMARY KEY,
   order_id INTEGER NOT NULL REFERENCES orders(id),
@@ -235,6 +243,7 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   delivery_enabled: "1",
   delivery_fee: "3000",
   min_delivery_order: "10000",
+  free_delivery_from: "0",
   store_open: "1",
   address: "",
   hours: "Lun a Sáb 8:00 – 20:00",

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { money } from "@/lib/format";
 import { productLabel } from "@/lib/types";
+import { normalizeCp, quoteDelivery, type DeliveryRules } from "@/lib/delivery";
 
 export type ShopProduct = {
   id: number;
@@ -22,7 +23,7 @@ export type ShopProduct = {
 type ShopSettings = {
   open: boolean;
   deliveryEnabled: boolean;
-  deliveryFee: number;
+  delivery: DeliveryRules;
   minDeliveryOrder: number;
   whatsapp: boolean;
   stripe: boolean;
@@ -47,6 +48,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
     settings.deliveryEnabled ? "domicilio" : "recoger",
   );
   const [address, setAddress] = useState("");
+  const [postalCode, setPostalCode] = useState("");
   const [addressRef, setAddressRef] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [notes, setNotes] = useState("");
@@ -73,6 +75,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
       if (cust.name) setName(cust.name);
       if (cust.phone) setPhone(cust.phone);
       if (cust.address) setAddress(cust.address);
+      if (cust.postalCode) setPostalCode(cust.postalCode);
       if (cust.addressRef) setAddressRef(cust.addressRef);
     } catch {}
     setLoaded(true);
@@ -105,7 +108,14 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
     .filter((l) => l.p && l.qty > 0);
   const count = lines.reduce((a, l) => a + l.qty, 0);
   const subtotal = lines.reduce((a, l) => a + l.p.price * l.qty, 0);
-  const fee = deliveryType === "domicilio" ? settings.deliveryFee : 0;
+  const byZones = settings.delivery.zones.length > 0;
+  const quote = quoteDelivery(settings.delivery, postalCode, subtotal);
+  const fee = deliveryType === "domicilio" && quote.ok ? quote.fee : 0;
+  const missingForFree =
+    deliveryType === "domicilio" && settings.delivery.freeFrom > 0 && subtotal < settings.delivery.freeFrom
+      ? settings.delivery.freeFrom - subtotal
+      : 0;
+  const deliveryBlocked = deliveryType === "domicilio" && !quote.ok;
   const total = subtotal + fee;
   const belowMin = deliveryType === "domicilio" && subtotal < settings.minDeliveryOrder;
 
@@ -144,7 +154,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
     }
     setSending(true);
     try {
-      localStorage.setItem(CUSTOMER_KEY, JSON.stringify({ name, phone, address, addressRef }));
+      localStorage.setItem(CUSTOMER_KEY, JSON.stringify({ name, phone, address, addressRef, postalCode }));
     } catch {}
     try {
       const res = await fetch("/api/orders", {
@@ -157,6 +167,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
           deliveryType,
           address,
           addressRef,
+          postalCode,
           lat: coords?.lat ?? null,
           lng: coords?.lng ?? null,
           notes,
@@ -203,7 +214,9 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
               {settings.deliveryEnabled && (
                 <Choice active={deliveryType === "domicilio"} onClick={() => setDeliveryType("domicilio")}>
                   🛵 A domicilio
-                  <span className="block text-xs font-normal opacity-75">Envío {money(settings.deliveryFee)}</span>
+                  <span className="block text-xs font-normal opacity-75">
+                    {byZones ? "Envío según tu código postal" : `Envío ${money(settings.delivery.flatFee)}`}
+                  </span>
                 </Choice>
               )}
               <Choice active={deliveryType === "recoger"} onClick={() => setDeliveryType("recoger")}>
@@ -232,6 +245,30 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
             </div>
             {deliveryType === "domicilio" && (
               <>
+                <div>
+                  <label className="label" htmlFor="cp">
+                    Código postal
+                  </label>
+                  <input
+                    id="cp"
+                    className="input max-w-40"
+                    required={byZones}
+                    inputMode="numeric"
+                    autoComplete="postal-code"
+                    pattern="[0-9]{5}"
+                    maxLength={5}
+                    placeholder="00000"
+                    value={postalCode}
+                    onChange={(e) => setPostalCode(normalizeCp(e.target.value))}
+                  />
+                  {byZones && postalCode.length === 5 && (
+                    <p className={`mt-1 text-sm ${quote.ok ? "text-green-700" : "text-red-700"}`} aria-live="polite">
+                      {quote.ok
+                        ? `✓ ${quote.zone} · ${quote.free ? "¡Envío gratis!" : `Envío ${money(quote.fee)}`}`
+                        : "Por ahora no llegamos a ese código postal. Puedes elegir “Paso a recoger”."}
+                    </p>
+                  )}
+                </div>
                 <div>
                   <label className="label">Dirección de entrega</label>
                   <input
@@ -308,11 +345,19 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
 
           <section className="card space-y-1 text-sm">
             <Row label="Subtotal" value={money(subtotal)} />
-            {fee > 0 && <Row label="Envío" value={money(fee)} />}
+            {deliveryType === "domicilio" && quote.ok && (
+              <Row
+                label={quote.zone ? `Envío (${quote.zone})` : "Envío"}
+                value={quote.free ? "Gratis" : money(fee)}
+              />
+            )}
             <div className="flex justify-between pt-2 text-lg font-semibold">
               <span>Total</span>
               <span>{money(total)}</span>
             </div>
+            {missingForFree > 0 && !belowMin && (
+              <p className="text-cafe-700">💡 Agrega {money(missingForFree)} más y tu envío es gratis.</p>
+            )}
             {belowMin && (
               <p className="text-amber-700">
                 Pedido mínimo a domicilio: {money(settings.minDeliveryOrder)}. Agrega {money(settings.minDeliveryOrder - subtotal)} más.
@@ -324,7 +369,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
 
           <button
             type="submit"
-            disabled={sending || lines.length === 0 || belowMin}
+            disabled={sending || lines.length === 0 || belowMin || deliveryBlocked}
             className={payment === "whatsapp" ? "btn-whatsapp w-full py-3 text-base" : "btn-primary w-full py-3 text-base"}
           >
             {sending

@@ -4,7 +4,7 @@ Sistema para la cafetería con dos partes:
 
 **Tienda para clientes** (`/`)
 - Menú por categorías, carrito y pedido desde el celular.
-- Entrega **a domicilio** (con costo de envío y pedido mínimo configurables, dirección, referencias y ubicación GPS) o **para recoger**.
+- Entrega **a domicilio** o **para recoger**. El envío se calcula por **código postal**: en *Ajustes* defines zonas (nombre, códigos postales y costo), el monto para **envío gratis** y el pedido mínimo. Si el código postal no está en ninguna zona, solo se permite recoger. Sin zonas configuradas se cobra un envío fijo.
 - Formas de pago: **pago en línea con Stripe** (tarjeta), **efectivo al recibir** (pregunta con cuánto paga para llevar cambio) o **pedido por WhatsApp** (se arma el mensaje con el pedido completo y se envía a tu número).
 - Página de **seguimiento del pedido** que se actualiza sola (Nuevo → Preparando → En camino → Entregado).
 

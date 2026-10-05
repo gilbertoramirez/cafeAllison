@@ -1,6 +1,7 @@
+import { money } from "@/lib/format";
 import Link from "next/link";
 import { all } from "@/lib/db";
-import { getSettings, stripeEnabled } from "@/lib/settings";
+import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { availableToday } from "@/lib/format";
 import { daysLabel, type Product } from "@/lib/types";
 import Shop from "@/components/Shop";
@@ -8,9 +9,10 @@ import Shop from "@/components/Shop";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [settings, products] = await Promise.all([
+  const [settings, products, delivery] = await Promise.all([
     getSettings(),
     all<Product>("SELECT * FROM products WHERE active = 1 ORDER BY (SELECT MIN(p2.sort) FROM products p2 WHERE p2.category = products.category), category, sort, name"),
+    getDeliveryRules(),
   ]);
 
   return (
@@ -22,6 +24,11 @@ export default async function Home() {
             {settings.hours}
             {settings.address ? ` · ${settings.address}` : ""}
           </p>
+          {settings.delivery_enabled && delivery.freeFrom > 0 && (
+            <p className="mt-3 inline-block rounded-lg bg-cafe-700 px-3 py-1 text-sm">
+              🛵 Envío gratis en pedidos desde {money(delivery.freeFrom)}
+            </p>
+          )}
           {!settings.store_open && (
             <p className="mt-3 inline-block rounded-lg bg-red-600 px-3 py-1 text-sm font-medium">
               Por ahora no estamos recibiendo pedidos en línea.
@@ -45,7 +52,7 @@ export default async function Home() {
         settings={{
           open: settings.store_open,
           deliveryEnabled: settings.delivery_enabled,
-          deliveryFee: settings.delivery_fee,
+          delivery,
           minDeliveryOrder: settings.min_delivery_order,
           whatsapp: Boolean(settings.whatsapp_number),
           stripe: stripeEnabled(),

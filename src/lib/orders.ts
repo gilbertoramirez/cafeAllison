@@ -21,7 +21,9 @@ export type NewOrderInput = {
   paid: boolean;
   status?: OrderStatus;
   cashGiven?: number | null;
-  deliveryFee?: number;
+  /** Calcula el envío según el subtotal (para envío gratis). */
+  deliveryFee?: number | ((subtotal: number) => number);
+  postalCode?: string;
   minSubtotal?: number;
   /** Pedidos en línea: respeta los días de venta de cada producto. */
   enforceDays?: boolean;
@@ -70,7 +72,8 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
     if (input.minSubtotal && subtotal < input.minSubtotal) {
       throw new OrderError("El pedido no alcanza el mínimo para entrega a domicilio.");
     }
-    const deliveryFee = input.deliveryType === "domicilio" ? (input.deliveryFee ?? 0) : 0;
+    const fee = typeof input.deliveryFee === "function" ? input.deliveryFee(subtotal) : (input.deliveryFee ?? 0);
+    const deliveryFee = input.deliveryType === "domicilio" ? fee : 0;
     const total = subtotal + deliveryFee;
     if (input.cashMustCover && input.cashGiven != null && input.cashGiven < total) {
       throw new OrderError("El efectivo recibido es menor al total.");
@@ -80,8 +83,8 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
 
     const [{ id: newId }] = await q<{ id: number }>(
       `INSERT INTO orders (token, channel, status, customer_name, phone, delivery_type, address, address_ref,
-         lat, lng, notes, payment_method, payment_status, cash_given, subtotal, delivery_fee, total, created_at, paid_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
+         lat, lng, notes, payment_method, payment_status, cash_given, subtotal, delivery_fee, total, created_at, paid_at, postal_code)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
       [
         token,
         input.channel,
@@ -102,6 +105,7 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
         total,
         now,
         input.paid ? now : null,
+        (input.postalCode ?? "").slice(0, 10),
       ],
     );
 

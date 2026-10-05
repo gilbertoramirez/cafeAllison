@@ -37,6 +37,7 @@ export type Order = {
   delivery_type: "domicilio" | "recoger" | "mostrador";
   address: string;
   address_ref: string;
+  postal_code: string;
   lat: number | null;
   lng: number | null;
   notes: string;

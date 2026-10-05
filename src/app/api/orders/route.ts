@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createOrder, getOrderItems, OrderError, orderCode, setOrderStatus } from "@/lib/orders";
-import { getSettings, stripeEnabled } from "@/lib/settings";
+import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
+import { normalizeCp, quoteDelivery } from "@/lib/delivery";
 import { getStripe } from "@/lib/stripe";
 import { siteUrl } from "@/lib/url";
 import { run } from "@/lib/db";
@@ -13,6 +14,7 @@ type Body = {
   deliveryType?: string;
   address?: string;
   addressRef?: string;
+  postalCode?: string;
   lat?: number | null;
   lng?: number | null;
   notes?: string;
@@ -45,6 +47,19 @@ export async function POST(req: Request) {
   const address = String(body.address ?? "").trim();
   if (deliveryType === "domicilio" && !address) return bad("Escribe tu dirección de entrega.");
 
+  const rules = await getDeliveryRules();
+  const postalCode = normalizeCp(String(body.postalCode ?? ""));
+  if (deliveryType === "domicilio") {
+    const check = quoteDelivery(rules, postalCode, 0);
+    if (!check.ok) {
+      return bad(
+        check.reason === "cp_incompleto"
+          ? "Escribe tu código postal de 5 dígitos."
+          : `Por ahora no entregamos en el código postal ${postalCode}. Puedes pasar a recogerlo.`,
+      );
+    }
+  }
+
   const pm = body.paymentMethod;
   const paymentMethod =
     pm === "stripe" && stripeEnabled() ? "stripe" : pm === "whatsapp" && settings.whatsapp_number ? "whatsapp" : "efectivo";
@@ -67,7 +82,11 @@ export async function POST(req: Request) {
       paymentMethod,
       paid: false,
       cashGiven: num(body.cashGiven) !== null ? Math.round(num(body.cashGiven)! * 100) : null,
-      deliveryFee: settings.delivery_fee,
+      postalCode,
+      deliveryFee: (subtotal) => {
+        const q = quoteDelivery(rules, postalCode, subtotal);
+        return q.ok ? q.fee : 0;
+      },
       minSubtotal: deliveryType === "domicilio" ? settings.min_delivery_order : 0,
       enforceDays: true,
     });

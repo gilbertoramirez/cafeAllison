@@ -14,11 +14,13 @@ export function orderMessage(order: Order, items: OrderItem[], trackUrl: string)
     "",
     ...items.map((i) => `• ${i.qty} × ${i.name} — ${money(i.unit_price * i.qty)}`),
     "",
-    order.delivery_fee ? `Envío: ${money(order.delivery_fee)}` : null,
+    order.delivery_type === "domicilio" ? `Envío: ${order.delivery_fee ? money(order.delivery_fee) : "gratis"}` : null,
     `*Total: ${money(order.total)}*`,
     "",
     `Nombre: ${order.customer_name}`,
-    order.delivery_type === "domicilio" ? `Entregar en: ${order.address}` : "Paso a recogerlo",
+    order.delivery_type === "domicilio"
+      ? `Entregar en: ${order.address}${order.postal_code ? `, CP ${order.postal_code}` : ""}`
+      : "Paso a recogerlo",
     order.address_ref ? `Referencias: ${order.address_ref}` : null,
     order.lat != null ? `Ubicación: https://maps.google.com/?q=${order.lat},${order.lng}` : null,
     order.notes ? `Notas: ${order.notes}` : null,

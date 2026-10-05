@@ -7,6 +7,7 @@ import { get, run, transaction } from "@/lib/db";
 import { addDays, addMonths, localDate, toCents } from "@/lib/format";
 import { createOrder, markOrderPaid, OrderError, setOrderStatus } from "@/lib/orders";
 import { setSetting } from "@/lib/settings";
+import { parseCps } from "@/lib/delivery";
 import type { Expense, OrderStatus, PaymentMethod } from "@/lib/types";
 import { EXPENSE_CATEGORIES, ORDER_STATUS_LABEL, productLabel } from "@/lib/types";
 
@@ -333,5 +334,29 @@ export async function saveSettings(formData: FormData) {
   await setSetting("store_open", formData.get("store_open") ? "1" : "0");
   await setSetting("delivery_fee", String(toCents(formData.get("delivery_fee"))));
   await setSetting("min_delivery_order", String(toCents(formData.get("min_delivery_order"))));
+  await setSetting("free_delivery_from", String(toCents(formData.get("free_delivery_from"))));
+  done();
+}
+
+// ---------- Zonas de envío por código postal ----------
+
+export async function saveZone(formData: FormData) {
+  await requireAdmin();
+  const id = int(formData, "id");
+  const name = str(formData, "name");
+  const cps = parseCps(str(formData, "postal_codes")).join(", ");
+  const fee = toCents(formData.get("fee"));
+  if (!name || !cps) return;
+  if (id) {
+    await run("UPDATE delivery_zones SET name = ?, postal_codes = ?, fee = ? WHERE id = ?", [name, cps, fee, id]);
+  } else {
+    await run("INSERT INTO delivery_zones (name, postal_codes, fee) VALUES (?, ?, ?)", [name, cps, fee]);
+  }
+  done();
+}
+
+export async function deleteZone(id: number) {
+  await requireAdmin();
+  await run("DELETE FROM delivery_zones WHERE id = ?", [id]);
   done();
 }

@@ -21,7 +21,11 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
       <PageTitle actions={<PeriodTabs current={periodo} base="/admin/finanzas" />}>Finanzas · {range.label}</PageTitle>
 
       <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-        <Stat label="Ventas" value={money(fin.sales)} hint={`${fin.orders} ventas · ticket promedio ${money(avgTicket)}`} />
+        <Stat
+          label="Ventas"
+          value={money(fin.sales)}
+          hint={`${fin.orders} ventas · ticket promedio ${money(avgTicket)}${fin.delivery ? ` · incluye ${money(fin.delivery)} de envíos` : ""}`}
+        />
         <Stat
           label="Utilidad bruta"
           value={money(fin.grossProfit)}

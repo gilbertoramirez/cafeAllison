@@ -97,10 +97,10 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/pe
             <span>{money(i.unit_price * i.qty)}</span>
           </div>
         ))}
-        {order.delivery_fee > 0 && (
+        {order.delivery_type === "domicilio" && (
           <div className="flex justify-between text-cafe-700">
             <span>Envío</span>
-            <span>{money(order.delivery_fee)}</span>
+            <span>{order.delivery_fee > 0 ? money(order.delivery_fee) : "Gratis"}</span>
           </div>
         )}
         <div className="flex justify-between border-t border-cafe-100 pt-2 text-base font-semibold">
@@ -116,7 +116,9 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/pe
           )}
         </p>
         <p className="text-cafe-700">
-          {order.delivery_type === "domicilio" ? `Entrega en: ${order.address}` : "Recoger en sucursal"}
+          {order.delivery_type === "domicilio"
+            ? `Entrega en: ${order.address}${order.postal_code ? `, CP ${order.postal_code}` : ""}`
+            : "Recoger en sucursal"}
         </p>
       </section>
 

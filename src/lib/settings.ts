@@ -1,3 +1,4 @@
+import type { DeliveryRules, DeliveryZone } from "./delivery";
 import { all, run } from "./db";
 
 export type Settings = {
@@ -6,6 +7,8 @@ export type Settings = {
   delivery_enabled: boolean;
   delivery_fee: number;
   min_delivery_order: number;
+  /** Envío gratis desde este subtotal (centavos). 0 = desactivado */
+  free_delivery_from: number;
   store_open: boolean;
   address: string;
   hours: string;
@@ -20,6 +23,7 @@ export async function getSettings(): Promise<Settings> {
     delivery_enabled: m.delivery_enabled === "1",
     delivery_fee: Number(m.delivery_fee ?? 0),
     min_delivery_order: Number(m.min_delivery_order ?? 0),
+    free_delivery_from: Number(m.free_delivery_from ?? 0),
     store_open: m.store_open !== "0",
     address: m.address ?? "",
     hours: m.hours ?? "",
@@ -35,4 +39,12 @@ export async function setSetting(key: string, value: string) {
 
 export function stripeEnabled(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY);
+}
+
+export async function getDeliveryRules(): Promise<DeliveryRules> {
+  const [s, zones] = await Promise.all([
+    getSettings(),
+    all<DeliveryZone>("SELECT id, name, postal_codes, fee FROM delivery_zones ORDER BY sort, fee, id"),
+  ]);
+  return { zones, flatFee: s.delivery_fee, freeFrom: s.free_delivery_from };
 }

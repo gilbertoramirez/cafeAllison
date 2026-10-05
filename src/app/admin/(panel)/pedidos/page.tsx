@@ -95,10 +95,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     <span className="tabular-nums">{money(i.unit_price * i.qty)}</span>
                   </li>
                 ))}
-                {o.delivery_fee > 0 && (
+                {o.delivery_type === "domicilio" && (
                   <li className="flex justify-between text-cafe-600">
                     <span>Envío</span>
-                    <span>{money(o.delivery_fee)}</span>
+                    <span>{o.delivery_fee > 0 ? money(o.delivery_fee) : "Gratis"}</span>
                   </li>
                 )}
                 <li className="mt-1 flex justify-between border-t border-cafe-100 pt-1 font-semibold">
@@ -119,7 +119,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
               {o.delivery_type === "domicilio" && (
                 <div className="rounded-lg bg-cafe-50 p-2">
-                  <p>📍 {o.address}</p>
+                  <p>
+                    📍 {o.address}
+                    {o.postal_code && <span className="text-cafe-600"> · CP {o.postal_code}</span>}
+                  </p>
                   {o.address_ref && <p className="text-cafe-600">{o.address_ref}</p>}
                   <a
                     className="text-cafe-700 underline"
@@ -128,7 +131,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     href={
                       o.lat != null
                         ? `https://www.google.com/maps/search/?api=1&query=${o.lat},${o.lng}`
-                        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address)}`
+                        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([o.address, o.postal_code].filter(Boolean).join(", "))}`
                     }
                   >
                     Abrir en mapa
