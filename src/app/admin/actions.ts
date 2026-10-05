@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { checkPassword, endSession, requireAdmin, startSession } from "@/lib/auth";
+import { checkPassword, endSession, passwordConfigured, requireAdmin, startSession } from "@/lib/auth";
 import { db, get, run } from "@/lib/db";
 import { addDays, addMonths, localDate, toCents } from "@/lib/format";
 import { createOrder, markOrderPaid, OrderError, setOrderStatus } from "@/lib/orders";
@@ -27,6 +27,9 @@ const num = (f: FormData, k: string) => {
 // ---------- Sesión ----------
 
 export async function login(_prev: string | null, formData: FormData): Promise<string | null> {
+  if (!passwordConfigured()) {
+    return "Falta configurar ADMIN_PASSWORD en las variables de entorno de este despliegue (y volver a desplegar).";
+  }
   if (!checkPassword(str(formData, "password"))) return "Contraseña incorrecta";
   await startSession();
   redirect("/admin");

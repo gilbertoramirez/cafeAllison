@@ -6,7 +6,7 @@ const COOKIE = "cafe_admin";
 const MAX_AGE = 60 * 60 * 24 * 14; // 14 días
 
 function adminPassword(): string | null {
-  const p = process.env.ADMIN_PASSWORD;
+  const p = process.env.ADMIN_PASSWORD?.trim();
   if (p) return p;
   // Solo en desarrollo hay contraseña por defecto
   return process.env.NODE_ENV === "production" ? null : "admin";
@@ -26,9 +26,13 @@ function safeEqual(a: string, b: string) {
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
+export function passwordConfigured(): boolean {
+  return adminPassword() !== null;
+}
+
 export function checkPassword(input: string): boolean {
   const p = adminPassword();
-  return p !== null && safeEqual(input, p);
+  return p !== null && safeEqual(input.trim(), p);
 }
 
 export async function startSession() {
