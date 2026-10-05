@@ -38,7 +38,16 @@ async function createPostgres(): Promise<Backend> {
   const pg = await import("pg");
   pg.types.setTypeParser(INT8, (v) => Number(v));
   pg.types.setTypeParser(NUMERIC, (v) => Number(v));
-  const pool: Pool = new pg.Pool({ connectionString, max: 5, idleTimeoutMillis: 10_000 });
+  const pool: Pool = new pg.Pool({
+    connectionString,
+    max: 5,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 10_000,
+    // Neon incluye channel_binding=require en su cadena de conexión
+    enableChannelBinding: /channel_binding=require/.test(connectionString),
+  });
+  // Un error en una conexión inactiva no debe tumbar el servidor
+  pool.on("error", (e) => console.error("Postgres pool error", e));
   return {
     query: async (sql, params = []) => (await pool.query(toPg(sql), params)).rows,
     async transaction(fn) {
