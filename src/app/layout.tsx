@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description: "Pide tu café y pan favorito con entrega a domicilio.",
 };
 
-export const viewport: Viewport = { themeColor: "#3b2416" };
+export const viewport: Viewport = { themeColor: "#3b2416", viewportFit: "cover" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

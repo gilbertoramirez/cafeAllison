@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export function PageTitle({ children, actions }: { children: ReactNode; actions?: ReactNode }) {
   return (
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-      <h1 className="text-2xl font-semibold">{children}</h1>
+      <h1 className="text-xl font-semibold sm:text-2xl">{children}</h1>
       {actions}
     </div>
   );
@@ -23,9 +23,9 @@ export function Stat({
   const color =
     tone === "good" ? "text-green-700" : tone === "bad" ? "text-red-700" : tone === "warn" ? "text-amber-700" : "text-cafe-900";
   return (
-    <div className="card">
-      <p className="text-xs font-medium tracking-wide text-cafe-600 uppercase">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold tabular-nums ${color}`}>{value}</p>
+    <div className="card p-3 sm:p-4">
+      <p className="text-[11px] font-medium tracking-wide text-cafe-600 uppercase sm:text-xs">{label}</p>
+      <p className={`mt-1 text-lg font-semibold tabular-nums sm:text-2xl ${color}`}>{value}</p>
       {hint && <p className="mt-1 text-xs text-cafe-600">{hint}</p>}
     </div>
   );
@@ -40,12 +40,12 @@ export function PeriodTabs({ current, base }: { current: string; base: string })
     ["anio", "Año"],
   ];
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="-mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
       {periods.map(([k, l]) => (
         <a
           key={k}
           href={`${base}?periodo=${k}`}
-          className={`rounded-full px-3 py-1 text-sm ${
+          className={`shrink-0 rounded-full px-3 py-1 text-sm ${
             current === k ? "bg-cafe-800 text-white" : "bg-white text-cafe-800 ring-1 ring-cafe-200"
           }`}
         >

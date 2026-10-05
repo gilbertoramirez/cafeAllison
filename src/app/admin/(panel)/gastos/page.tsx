@@ -80,16 +80,17 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
                     {e.date}
                     {e.date < today && " · vencido"}
                   </td>
-                  <td>{EXPENSE_CATEGORIES[e.category] ?? e.category}</td>
+                  <td className="hidden sm:table-cell">{EXPENSE_CATEGORIES[e.category] ?? e.category}</td>
                   <td>
+                    <span className="block text-xs text-cafe-600 sm:hidden">{EXPENSE_CATEGORIES[e.category] ?? e.category}</span>
                     {e.description} {e.recurring !== "none" && <span className="badge bg-cafe-100">{RECURRING[e.recurring]}</span>}
                   </td>
                   <td className="text-right font-medium tabular-nums">{money(e.amount)}</td>
-                  <td className="text-right whitespace-nowrap">
+                  <td className="text-right">
                     <form action={payExpense.bind(null, e.id)} className="inline">
                       <button className="btn-primary px-3 py-1">Pagar</button>
                     </form>
-                    <form action={deleteExpense.bind(null, e.id)} className="ml-2 inline">
+                    <form action={deleteExpense.bind(null, e.id)} className="mt-1 block sm:ml-2 sm:inline">
                       <button className="text-xs text-red-700 underline">Borrar</button>
                     </form>
                   </td>
@@ -114,7 +115,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
             <thead>
               <tr>
                 <th>Fecha</th>
-                <th>Categoría</th>
+                <th className="hidden sm:table-cell">Categoría</th>
                 <th>Descripción</th>
                 <th className="text-right">Monto</th>
                 <th></th>
@@ -124,8 +125,11 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
               {paid.map((e) => (
                 <tr key={e.id}>
                   <td className="whitespace-nowrap">{e.date}</td>
-                  <td>{EXPENSE_CATEGORIES[e.category] ?? e.category}</td>
-                  <td>{e.description}</td>
+                  <td className="hidden sm:table-cell">{EXPENSE_CATEGORIES[e.category] ?? e.category}</td>
+                  <td>
+                    <span className="block text-xs text-cafe-600 sm:hidden">{EXPENSE_CATEGORIES[e.category] ?? e.category}</span>
+                    {e.description}
+                  </td>
                   <td className="text-right tabular-nums">{money(e.amount)}</td>
                   <td className="text-right">
                     <form action={deleteExpense.bind(null, e.id)}>

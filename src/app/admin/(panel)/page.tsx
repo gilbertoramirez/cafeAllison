@@ -34,7 +34,7 @@ export default async function Dashboard() {
     <div className="space-y-6">
       <PageTitle actions={<Link href="/admin/pos" className="btn-primary">🧾 Nueva venta</Link>}>Resumen</PageTitle>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
         <Stat label="Ventas de hoy" value={money(todaySales.sales)} hint={`${todaySales.orders} ventas`} />
         <Stat label="Ventas del mes" value={money(monthFin.sales)} hint={`${monthFin.orders} ventas`} />
         <Stat

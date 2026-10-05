@@ -39,7 +39,7 @@ body {
   @apply btn bg-[#25D366] text-white hover:bg-[#1ebe5a];
 }
 @utility input {
-  @apply w-full rounded-lg border border-cafe-200 bg-white px-3 py-2 text-sm outline-none focus:border-cafe-500 focus:ring-2 focus:ring-cafe-200;
+  @apply w-full rounded-lg border border-cafe-200 bg-white px-3 py-2 text-base sm:text-sm outline-none focus:border-cafe-500 focus:ring-2 focus:ring-cafe-200;
 }
 @utility label {
   @apply mb-1 block text-xs font-medium text-cafe-700;
@@ -51,7 +51,7 @@ body {
   @apply inline-block rounded-full px-2 py-0.5 text-xs font-medium;
 }
 @utility data-table {
-  @apply w-full text-left text-sm;
+  @apply w-full text-left text-[13px] sm:text-sm;
   & th {
     @apply border-b border-cafe-100 px-2 py-2 text-xs font-medium tracking-wide text-cafe-600 uppercase;
   }

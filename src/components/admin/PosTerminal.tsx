@@ -16,6 +16,7 @@ export default function PosTerminal({ products }: { products: P[] }) {
   const [customer, setCustomer] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
+  const [sheet, setSheet] = useState(false); // ticket abierto en celular
 
   const categories = useMemo(() => ["Todo", ...new Set(products.map((p) => p.category))], [products]);
   const shown = products.filter(
@@ -59,6 +60,7 @@ export default function PosTerminal({ products }: { products: P[] }) {
         setTicket({});
         setCash("");
         setCustomer("");
+        setSheet(false);
       } else {
         setMsg({ ok: false, text: res.error });
       }
@@ -67,54 +69,8 @@ export default function PosTerminal({ products }: { products: P[] }) {
 
   const quickCash = [total, 10000, 20000, 50000].filter((v, i, a) => v >= total && a.indexOf(v) === i && v > 0);
 
-  return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-      <section className="min-w-0">
-        <div className="mb-3 flex flex-wrap gap-2">
-          <input
-            className="input max-w-56"
-            placeholder="Buscar producto…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {categories.map((c) => (
-            <button
-              key={c}
-              onClick={() => setCategory(c)}
-              className={`rounded-full px-3 py-1 text-sm ${
-                category === c ? "bg-cafe-800 text-white" : "bg-white ring-1 ring-cafe-200"
-              }`}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-          {shown.map((p) => {
-            const out = p.maxQty <= 0;
-            const q = ticket[p.id] ?? 0;
-            return (
-              <button
-                key={p.id}
-                disabled={out || q >= p.maxQty}
-                onClick={() => add(p, 1)}
-                className="card relative text-left transition hover:border-cafe-300 active:scale-[0.98] disabled:opacity-40"
-              >
-                <p className="font-medium">{p.name}</p>
-                <p className="text-sm text-cafe-700">{money(p.price)}</p>
-                {p.maxQty < 999 && <p className="text-xs text-cafe-500">{out ? "Agotado" : `Quedan ${p.maxQty}`}</p>}
-                {q > 0 && (
-                  <span className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-cafe-800 text-xs font-bold text-white">
-                    {q}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <aside className="card h-fit space-y-3 lg:sticky lg:top-4">
+  const ticketPanel = (
+    <>
         <h2 className="text-lg font-semibold">Ticket</h2>
         {lines.length === 0 ? (
           <p className="text-sm text-cafe-600">Toca un producto para agregarlo.</p>
@@ -200,7 +156,91 @@ export default function PosTerminal({ products }: { products: P[] }) {
             Vaciar ticket
           </button>
         )}
-      </aside>
+    </>
+  );
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+      <section className="min-w-0">
+        <input
+          className="input mb-2 lg:max-w-72"
+          type="search"
+          placeholder="Buscar producto…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:px-0">
+          {categories.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCategory(c)}
+              className={`shrink-0 rounded-full px-3 py-1 text-sm ${
+                category === c ? "bg-cafe-800 text-white" : "bg-white ring-1 ring-cafe-200"
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+        {msg?.ok && (
+          <p className="mb-3 rounded-lg bg-green-50 p-2 text-sm text-green-800 lg:hidden">{msg.text}</p>
+        )}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+          {shown.map((p) => {
+            const out = p.maxQty <= 0;
+            const q = ticket[p.id] ?? 0;
+            return (
+              <button
+                key={p.id}
+                disabled={out || q >= p.maxQty}
+                onClick={() => add(p, 1)}
+                className="card relative p-3 text-left transition hover:border-cafe-300 active:scale-[0.97] disabled:opacity-40 lg:p-4"
+              >
+                <p className="pr-5 text-sm leading-snug font-medium lg:text-base">{p.name}</p>
+                <p className="text-sm text-cafe-700">{money(p.price)}</p>
+                {p.maxQty < 999 && <p className="text-xs text-cafe-500">{out ? "Agotado" : `Quedan ${p.maxQty}`}</p>}
+                {q > 0 && (
+                  <span className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-cafe-800 text-xs font-bold text-white">
+                    {q}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Escritorio: ticket a la derecha */}
+      <aside className="card hidden h-fit space-y-3 lg:sticky lg:top-4 lg:block">{ticketPanel}</aside>
+
+      {/* Celular: barra con total arriba de la navegación */}
+      {lines.length > 0 && !sheet && (
+        <button
+          onClick={() => setSheet(true)}
+          className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 flex items-center justify-between rounded-xl bg-cafe-800 px-4 py-3 text-white shadow-lg lg:hidden"
+        >
+          <span className="text-sm">
+            🧾 {lines.reduce((a, l) => a + l.qty, 0)} producto(s) · <span className="underline">ver ticket</span>
+          </span>
+          <span className="text-lg font-semibold tabular-nums">Cobrar {money(total)}</span>
+        </button>
+      )}
+      {sheet && (
+        <div className="fixed inset-0 z-[60] bg-black/40 lg:hidden" onClick={() => setSheet(false)}>
+          <div
+            className="absolute inset-x-0 bottom-0 max-h-[90dvh] space-y-3 overflow-y-auto rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="mx-auto h-1 w-10 rounded-full bg-cafe-200" />
+            </div>
+            {ticketPanel}
+            <button className="btn-secondary w-full" onClick={() => setSheet(false)}>
+              Seguir agregando
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

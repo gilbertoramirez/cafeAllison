@@ -368,7 +368,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
       ))}
 
       {count > 0 && settings.open && (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-cafe-200 bg-white/95 p-3 backdrop-blur">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-cafe-200 bg-white/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur">
           <div className="mx-auto flex max-w-5xl items-center gap-3">
             <button className="flex-1 text-left text-sm" onClick={() => setShowCart((v) => !v)}>
               <span className="font-semibold">{count} producto{count === 1 ? "" : "s"}</span> ·{" "}

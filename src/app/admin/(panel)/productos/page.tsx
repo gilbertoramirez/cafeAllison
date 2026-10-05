@@ -17,7 +17,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
       <PageTitle actions={<Link href="?nuevo=1" className="btn-primary">+ Agregar producto</Link>}>Menú</PageTitle>
 
       {showForm && (
-        <form action={saveProduct} className="card grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <form action={saveProduct} className="card grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <input type="hidden" name="id" value={editing?.id ?? ""} />
           <h2 className="font-semibold sm:col-span-2 lg:col-span-4">{editing ? `Editar: ${productLabel(editing)}` : "Nuevo producto"}</h2>
           <Field label="Nombre" className="lg:col-span-2">
@@ -90,11 +90,11 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           <thead>
             <tr>
               <th>Producto</th>
-              <th>Categoría</th>
+              <th className="hidden sm:table-cell">Categoría</th>
               <th className="text-right">Precio</th>
-              <th className="text-right">Costo</th>
+              <th className="hidden text-right sm:table-cell">Costo</th>
               <th className="text-right">Margen</th>
-              <th className="text-right">Existencia</th>
+              <th className="hidden text-right sm:table-cell">Existencia</th>
               <th></th>
             </tr>
           </thead>
@@ -108,15 +108,15 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                     {p.available_days && <span className="badge ml-2 bg-amber-50 text-amber-800">{daysLabel(p.available_days)}</span>}
                     {!p.active && <span className="badge ml-2 bg-gray-100">Oculto</span>}
                   </td>
-                  <td>{p.category}</td>
+                  <td className="hidden sm:table-cell">{p.category}</td>
                   <td className="text-right tabular-nums">{money(p.price)}</td>
-                  <td className="text-right tabular-nums">{money(p.cost)}</td>
+                  <td className="hidden text-right tabular-nums sm:table-cell">{money(p.cost)}</td>
                   <td className={`text-right tabular-nums ${margin < 40 ? "text-amber-700" : ""}`}>{margin}%</td>
-                  <td className={`text-right tabular-nums ${p.track_stock && p.stock <= p.min_stock ? "font-semibold text-red-700" : ""}`}>
+                  <td className={`hidden text-right tabular-nums sm:table-cell ${p.track_stock && p.stock <= p.min_stock ? "font-semibold text-red-700" : ""}`}>
                     {p.track_stock ? p.stock : "—"}
                   </td>
-                  <td className="text-right whitespace-nowrap">
-                    <Link href={`?id=${p.id}`} className="mr-3 text-cafe-700 underline">
+                  <td className="text-right">
+                    <Link href={`?id=${p.id}`} className="mr-2 block text-cafe-700 underline sm:mr-3 sm:inline">
                       Editar
                     </Link>
                     <form action={toggleProduct.bind(null, p.id)} className="inline">
