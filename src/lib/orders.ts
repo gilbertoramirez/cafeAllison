@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { all, db, get } from "./db";
+import { all, get, run, transaction } from "./db";
 import type { Order, OrderItem, OrderStatus, PaymentMethod, Product } from "./types";
 
 export class OrderError extends Error {}
@@ -39,15 +39,14 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
   if (merged.size === 0) throw new OrderError("El pedido está vacío.");
   for (const qty of merged.values()) if (qty > 99) throw new OrderError("Cantidad no válida.");
 
-  const client = await db();
-  const tx = await client.transaction("write");
-  try {
+  const orderId = await transaction(async (q) => {
     const ids = [...merged.keys()];
-    const res = await tx.execute({
-      sql: `SELECT * FROM products WHERE id IN (${ids.map(() => "?").join(",")})`,
-      args: ids,
-    });
-    const products = new Map((res.rows as unknown as Product[]).map((p) => [p.id, p]));
+    // FOR UPDATE bloquea los productos para no vender más existencias de las que hay
+    const rows = await q<Product>(
+      `SELECT * FROM products WHERE id IN (${ids.map(() => "?").join(",")}) FOR UPDATE`,
+      ids,
+    );
+    const products = new Map(rows.map((p) => [p.id, p]));
 
     let subtotal = 0;
     const lines: { p: Product; qty: number }[] = [];
@@ -72,11 +71,11 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
     const token = randomBytes(9).toString("base64url");
     const now = new Date().toISOString();
 
-    const ins = await tx.execute({
-      sql: `INSERT INTO orders (token, channel, status, customer_name, phone, delivery_type, address, address_ref,
-              lat, lng, notes, payment_method, payment_status, cash_given, subtotal, delivery_fee, total, created_at, paid_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      args: [
+    const [{ id: newId }] = await q<{ id: number }>(
+      `INSERT INTO orders (token, channel, status, customer_name, phone, delivery_type, address, address_ref,
+         lat, lng, notes, payment_method, payment_status, cash_given, subtotal, delivery_fee, total, created_at, paid_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
+      [
         token,
         input.channel,
         input.status ?? "nuevo",
@@ -97,30 +96,28 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
         now,
         input.paid ? now : null,
       ],
-    });
-    const orderId = Number(ins.lastInsertRowid);
+    );
 
     for (const { p, qty } of lines) {
-      await tx.execute({
-        sql: "INSERT INTO order_items (order_id, product_id, name, unit_price, unit_cost, qty) VALUES (?,?,?,?,?,?)",
-        args: [orderId, p.id, p.name, p.price, p.cost, qty],
-      });
+      await q("INSERT INTO order_items (order_id, product_id, name, unit_price, unit_cost, qty) VALUES (?,?,?,?,?,?)", [
+        newId,
+        p.id,
+        p.name,
+        p.price,
+        p.cost,
+        qty,
+      ]);
       if (p.track_stock) {
-        await tx.execute({ sql: "UPDATE products SET stock = stock - ? WHERE id = ?", args: [qty, p.id] });
-        await tx.execute({
-          sql: "INSERT INTO inventory_movements (item_type, item_id, change, reason, order_id) VALUES ('product', ?, ?, 'venta', ?)",
-          args: [p.id, -qty, orderId],
-        });
+        await q("UPDATE products SET stock = stock - ? WHERE id = ?", [qty, p.id]);
+        await q(
+          "INSERT INTO inventory_movements (item_type, item_id, change, reason, order_id) VALUES ('product', ?, ?, 'venta', ?)",
+          [p.id, -qty, newId],
+        );
       }
     }
-    await tx.commit();
-    return (await getOrderById(orderId))!;
-  } catch (e) {
-    await tx.rollback();
-    throw e;
-  } finally {
-    tx.close();
-  }
+    return newId;
+  });
+  return (await getOrderById(orderId))!;
 }
 
 export async function getOrderById(id: number) {
@@ -151,46 +148,34 @@ export async function itemsForOrders(orderIds: number[]): Promise<Map<number, Or
 
 /** Cambia el estado; al cancelar regresa el stock al inventario. */
 export async function setOrderStatus(orderId: number, status: OrderStatus) {
-  const client = await db();
-  const tx = await client.transaction("write");
-  try {
-    const r = await tx.execute({ sql: "SELECT status FROM orders WHERE id = ?", args: [orderId] });
-    const prev = r.rows[0]?.status as OrderStatus | undefined;
-    if (!prev || prev === status) {
-      await tx.commit();
-      return;
-    }
+  await transaction(async (q) => {
+    const [row] = await q<{ status: OrderStatus }>("SELECT status FROM orders WHERE id = ? FOR UPDATE", [orderId]);
+    const prev = row?.status;
+    if (!prev || prev === status) return;
     if (prev === "cancelado") throw new OrderError("Un pedido cancelado no se puede reabrir.");
-    await tx.execute({ sql: "UPDATE orders SET status = ? WHERE id = ?", args: [status, orderId] });
+    await q("UPDATE orders SET status = ? WHERE id = ?", [status, orderId]);
     if (status === "cancelado") {
-      const items = await tx.execute({
-        sql: `SELECT oi.product_id, oi.qty FROM order_items oi JOIN products p ON p.id = oi.product_id
-              WHERE oi.order_id = ? AND p.track_stock = 1`,
-        args: [orderId],
-      });
-      for (const it of items.rows) {
-        await tx.execute({ sql: "UPDATE products SET stock = stock + ? WHERE id = ?", args: [it.qty, it.product_id] });
-        await tx.execute({
-          sql: "INSERT INTO inventory_movements (item_type, item_id, change, reason, order_id) VALUES ('product', ?, ?, 'cancelacion', ?)",
-          args: [it.product_id, it.qty, orderId],
-        });
+      const items = await q<{ product_id: number; qty: number }>(
+        `SELECT oi.product_id, oi.qty FROM order_items oi JOIN products p ON p.id = oi.product_id
+         WHERE oi.order_id = ? AND p.track_stock = 1`,
+        [orderId],
+      );
+      for (const it of items) {
+        await q("UPDATE products SET stock = stock + ? WHERE id = ?", [it.qty, it.product_id]);
+        await q(
+          "INSERT INTO inventory_movements (item_type, item_id, change, reason, order_id) VALUES ('product', ?, ?, 'cancelacion', ?)",
+          [it.product_id, it.qty, orderId],
+        );
       }
     }
-    await tx.commit();
-  } catch (e) {
-    await tx.rollback();
-    throw e;
-  } finally {
-    tx.close();
-  }
+  });
 }
 
 export async function markOrderPaid(orderId: number) {
-  const client = await db();
-  await client.execute({
-    sql: "UPDATE orders SET payment_status = 'pagado', paid_at = COALESCE(paid_at, ?) WHERE id = ? AND status != 'cancelado'",
-    args: [new Date().toISOString(), orderId],
-  });
+  await run(
+    "UPDATE orders SET payment_status = 'pagado', paid_at = COALESCE(paid_at, ?) WHERE id = ? AND status != 'cancelado'",
+    [new Date().toISOString(), orderId],
+  );
 }
 
 export function orderCode(id: number) {

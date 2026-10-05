@@ -56,7 +56,7 @@ export async function salesByChannel(r: Range) {
   return all<{ channel: string; payment_method: string; orders: number; total: number }>(
     `SELECT channel, payment_method, COUNT(*) AS orders, SUM(total) AS total FROM orders
      WHERE payment_status = 'pagado' AND status != 'cancelado' AND created_at >= ? AND created_at < ?
-     GROUP BY channel, payment_method ORDER BY total DESC`,
+     GROUP BY channel, payment_method ORDER BY SUM(total) DESC`,
     [a, b],
   );
 }
@@ -94,7 +94,7 @@ export async function expensesByCategory(r: Range) {
     `SELECT category,
             COALESCE(SUM(CASE WHEN status='pagado' THEN amount END),0) AS paid,
             COALESCE(SUM(CASE WHEN status='pendiente' THEN amount END),0) AS pending
-     FROM expenses WHERE date >= ? AND date <= ? GROUP BY category ORDER BY paid + pending DESC`,
+     FROM expenses WHERE date >= ? AND date <= ? GROUP BY category ORDER BY SUM(amount) DESC`,
     [r.from, r.to],
   );
 }

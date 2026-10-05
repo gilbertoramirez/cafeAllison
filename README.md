@@ -31,7 +31,7 @@ npm run dev
 - Tienda: http://localhost:3000
 - Panel: http://localhost:3000/admin (en desarrollo, si no defines `ADMIN_PASSWORD`, la contraseña es `admin`)
 
-La primera vez se crea la base de datos `data/cafe.db` con un **menú de ejemplo**; edítalo desde *Admin → Menú* con tus productos y precios reales. Luego ve a *Ajustes* y pon tu número de WhatsApp.
+La primera vez se crea la base de datos local (`data/pglite`) con un **menú de ejemplo**; edítalo desde *Admin → Menú* con tus productos y precios reales. Luego ve a *Ajustes* y pon tu número de WhatsApp.
 
 ## Pagos con Stripe
 
@@ -46,15 +46,17 @@ El pedido se marca como **pagado** cuando Stripe confirma el pago (por webhook o
 
 Desde el panel de Stripe puedes activar otros métodos de pago para México (por ejemplo OXXO) sin cambiar código.
 
-## Publicarlo en internet (Vercel + Turso)
+## Publicarlo en internet (Vercel + Neon)
 
-Vercel no guarda archivos entre peticiones, así que en producción la base de datos debe estar en **Turso** (SQLite en la nube, tiene plan gratuito):
+La app usa **Postgres**. En Vercel la base de datos es **Neon** (tiene plan gratuito):
 
-1. Crea una base en https://turso.tech y obtén la URL (`libsql://...`) y un token.
-2. Sube este repositorio a Vercel y define las variables de entorno: `ADMIN_PASSWORD`, `SESSION_SECRET`, `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `SITE_URL` y, si usas Stripe, `STRIPE_SECRET_KEY` y `STRIPE_WEBHOOK_SECRET`.
-3. Las tablas y el menú de ejemplo se crean solos en el primer acceso.
+1. En tu proyecto de Vercel ve a **Storage → Create Database → Neon** (o *Marketplace → Neon*), créala y conéctala al proyecto marcando **Production y Preview**. Esto agrega `DATABASE_URL` automáticamente.
+   - Alternativa: crea la base en https://neon.tech y pega su *connection string* (`postgresql://...?sslmode=require`) en la variable `DATABASE_URL`.
+2. Define también `ADMIN_PASSWORD`, `SESSION_SECRET`, `SITE_URL` y, si usas Stripe, `STRIPE_SECRET_KEY` y `STRIPE_WEBHOOK_SECRET` (en Production **y** Preview).
+3. Vuelve a desplegar. Las tablas y el menú de ejemplo se crean solos en el primer acceso.
+4. Comprueba en `https://TU-DOMINIO/api/salud` que diga `"databaseType": "postgres (Neon)"` y `"adminPassword": "configurada"`.
 
-También funciona en cualquier servidor con Node (Railway, Render, un VPS) usando el archivo SQLite local; solo asegúrate de que la carpeta `data/` esté en un disco persistente y de respaldarla.
+Sin `DATABASE_URL`, en tu computadora se usa **PGlite** (Postgres embebido, guardado en `data/pglite`), así que no necesitas instalar nada para probar. En Vercel sin `DATABASE_URL` funciona en modo demo con datos temporales (el panel lo avisa).
 
 ## Cómo se calculan las ganancias
 
@@ -66,4 +68,4 @@ Solo cuentan los pedidos **pagados** y no cancelados. Los pedidos en efectivo a 
 
 ## Tecnología
 
-Next.js (App Router), React, Tailwind CSS, SQLite/libSQL (`@libsql/client`) y Stripe Checkout. Montos guardados en centavos.
+Next.js (App Router), React, Tailwind CSS, Postgres (Neon con `pg`, PGlite en local) y Stripe Checkout. Montos guardados en centavos.

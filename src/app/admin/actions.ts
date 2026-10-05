@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { checkPassword, endSession, passwordConfigured, requireAdmin, startSession } from "@/lib/auth";
-import { db, get, run } from "@/lib/db";
+import { get, run, transaction } from "@/lib/db";
 import { addDays, addMonths, localDate, toCents } from "@/lib/format";
 import { createOrder, markOrderPaid, OrderError, setOrderStatus } from "@/lib/orders";
 import { setSetting } from "@/lib/settings";
@@ -164,25 +164,22 @@ export async function restock(formData: FormData) {
   const item = await get<{ name: string }>(`SELECT name FROM ${table} WHERE id = ?`, [id]);
   if (!item) return;
 
-  const client = await db();
-  const stmts = [
-    type === "product"
-      ? { sql: "UPDATE products SET stock = stock + ? WHERE id = ?", args: [Math.round(qty), id] }
-      : { sql: "UPDATE supplies SET qty = qty + ? WHERE id = ?", args: [qty, id] },
-    {
-      sql: "INSERT INTO inventory_movements (item_type, item_id, change, reason, note) VALUES (?,?,?,?,?)",
-      args: [type, id, type === "product" ? Math.round(qty) : qty, "resurtido", str(formData, "note")],
-    },
-  ];
-  if (totalCost > 0 && formData.get("update_cost")) {
-    const unit = Math.round(totalCost / qty);
-    stmts.push(
-      type === "product"
-        ? { sql: "UPDATE products SET cost = ? WHERE id = ?", args: [unit, id] }
-        : { sql: "UPDATE supplies SET cost_per_unit = ? WHERE id = ?", args: [unit, id] },
-    );
-  }
-  await client.batch(stmts, "write");
+  await transaction(async (q) => {
+    if (type === "product") await q("UPDATE products SET stock = stock + ? WHERE id = ?", [Math.round(qty), id]);
+    else await q("UPDATE supplies SET qty = qty + ? WHERE id = ?", [qty, id]);
+    await q("INSERT INTO inventory_movements (item_type, item_id, change, reason, note) VALUES (?,?,?,?,?)", [
+      type,
+      id,
+      type === "product" ? Math.round(qty) : qty,
+      "resurtido",
+      str(formData, "note"),
+    ]);
+    if (totalCost > 0 && formData.get("update_cost")) {
+      const unit = Math.round(totalCost / qty);
+      if (type === "product") await q("UPDATE products SET cost = ? WHERE id = ?", [unit, id]);
+      else await q("UPDATE supplies SET cost_per_unit = ? WHERE id = ?", [unit, id]);
+    }
+  });
 
   if (totalCost > 0 && formData.get("register_expense")) {
     await addExpense({
@@ -210,19 +207,17 @@ export async function adjustStock(formData: FormData) {
   const target = type === "product" ? Math.round(newQty) : newQty;
   const change = target - Number(row.q);
   if (change === 0) return;
-  const client = await db();
-  await client.batch(
-    [
-      type === "product"
-        ? { sql: "UPDATE products SET stock = ? WHERE id = ?", args: [target, id] }
-        : { sql: "UPDATE supplies SET qty = ? WHERE id = ?", args: [target, id] },
-      {
-        sql: "INSERT INTO inventory_movements (item_type, item_id, change, reason, note) VALUES (?,?,?,?,?)",
-        args: [type, id, change, "ajuste", str(formData, "note")],
-      },
-    ],
-    "write",
-  );
+  await transaction(async (q) => {
+    if (type === "product") await q("UPDATE products SET stock = ? WHERE id = ?", [target, id]);
+    else await q("UPDATE supplies SET qty = ? WHERE id = ?", [target, id]);
+    await q("INSERT INTO inventory_movements (item_type, item_id, change, reason, note) VALUES (?,?,?,?,?)", [
+      type,
+      id,
+      change,
+      "ajuste",
+      str(formData, "note"),
+    ]);
+  });
   done();
 }
 
