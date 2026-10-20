@@ -516,6 +516,11 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
                     </span>
                   )}
                   <span className="mt-3 text-sm leading-tight font-semibold">{first.name}</span>
+                  {first.size && (
+                    <span className="mt-0.5 text-[11px] text-cafe-500">
+                      {variants.map((v) => v.size.split(" ").pop()).join(" · ")}
+                    </span>
+                  )}
                   <span className="mt-1 text-xs text-cafe-600">
                     {unavailable ? (
                       <span className="font-medium text-amber-700">{unavailable}</span>
@@ -595,6 +600,12 @@ function ProductImage({ p, size, dim }: { p: ShopProduct; size: "sm" | "lg" | "x
   );
 }
 
+/** Tamaño relativo del vaso según las onzas (8oz chico, 12oz mediano, 16oz grande). */
+function cupScale(size: string) {
+  const oz = Number(/(\d+)\s*oz/i.exec(size)?.[1] ?? 12);
+  return oz <= 8 ? 0 : oz <= 12 ? 1 : 2;
+}
+
 /** Vaso para el selector de tamaño: más grande según el tamaño. */
 function CupIcon({ scale }: { scale: number }) {
   const h = 22 + scale * 8;
@@ -668,7 +679,7 @@ function ProductSheet({
           <div className="space-y-6 p-5">
             {p.description && <p className="text-sm text-cafe-700">{p.description}</p>}
 
-            {variants.length > 1 && (
+            {(variants.length > 1 || p.size) && (
               <div>
                 <h4 className="mb-3 text-sm font-bold tracking-wide text-cafe-800 uppercase">Tamaño</h4>
                 <div className="flex justify-center gap-3" role="radiogroup" aria-label="Tamaño">
@@ -686,7 +697,7 @@ function ProductSheet({
                           sel ? "border-cafe-800 bg-cafe-50 text-cafe-900" : "border-cafe-100 text-cafe-500"
                         }`}
                       >
-                        <CupIcon scale={variants.length === 1 ? 1 : (i / (variants.length - 1)) * 2} />
+                        <CupIcon scale={variants.length === 1 ? cupScale(v.size) : (i / (variants.length - 1)) * 2} />
                         <span className="text-sm font-bold">{rest.length ? code : v.size}</span>
                         {rest.length > 0 && <span className="-mt-1 text-[11px]">{rest.join(" ")}</span>}
                         <span className="text-xs font-semibold">{money(v.price)}</span>
