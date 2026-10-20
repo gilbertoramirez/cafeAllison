@@ -41,6 +41,7 @@ export default async function Home() {
           id: p.id,
           name: p.name,
           size: p.size,
+          icon: p.icon,
           notToday: availableToday(p.available_days) ? null : `Solo ${daysLabel(p.available_days)}`,
           description: p.description,
           category: p.category,

@@ -3,6 +3,7 @@ export type Product = {
   name: string;
   size: string;
   available_days: string;
+  icon: string;
   description: string;
   category: string;
   price: number;

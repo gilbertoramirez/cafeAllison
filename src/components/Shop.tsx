@@ -9,6 +9,7 @@ export type ShopProduct = {
   id: number;
   name: string;
   size: string;
+  icon: string;
   /** p.ej. "Solo Vie, Sáb" cuando hoy no se vende; null si está disponible */
   notToday: string | null;
   description: string;
@@ -33,6 +34,9 @@ type CartLine = { key: string; productId: number; qty: number; note: string };
 const CART_KEY = "cafe_cart_v2";
 
 const CATEGORY_ICON: Record<string, string> = {
+  "Bebidas Calientes": "☕",
+  "Calientes Sin Café": "🍫",
+  "Bebidas Frías": "🧊",
   Café: "☕",
   "Sin Café": "🍫",
   "Barra Fría": "🧊",
@@ -585,7 +589,7 @@ function ProductImage({ p, size, dim }: { p: ShopProduct; size: "sm" | "lg" | "x
         // eslint-disable-next-line @next/next/no-img-element
         <img src={p.image_url} alt="" className="h-full w-full object-cover" />
       ) : (
-        <span aria-hidden>{iconFor(p.category)}</span>
+        <span aria-hidden>{p.icon || iconFor(p.category)}</span>
       )}
     </span>
   );

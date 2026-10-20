@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS products (
 );
 ALTER TABLE products ADD COLUMN IF NOT EXISTS size TEXT NOT NULL DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS available_days TEXT NOT NULL DEFAULT '';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS icon TEXT NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS supplies (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -180,64 +181,141 @@ CREATE TABLE IF NOT EXISTS settings (
 
 // Menú de Café Allison (precios en pesos). Se puede editar desde Admin > Menú.
 // Cada tamaño es un producto; la tienda los agrupa por nombre.
-type SeedItem = { name: string; category: string; description?: string; sizes: [string, number][]; days?: string };
+type SeedItem = {
+  name: string;
+  category: string;
+  icon: string;
+  description?: string;
+  sizes: [string, number][];
+  days?: string;
+  inactive?: boolean;
+  /** Nombres anteriores, para conservar costos/existencias al renombrar */
+  was?: string[];
+};
 const FLAVOR = "Elige tu sabor favorito.";
 const OLD_FLAVOR = "Indica el sabor en las notas del pedido.";
 const CH = "CH 8oz";
 const M = "M 12oz";
 const G = "G 16oz";
+const HOT = "Bebidas Calientes";
+const HOT_NC = "Calientes Sin Café";
+const COLD = "Bebidas Frías";
+const FRAPPE = "Frappés Especiales";
+const SHAKE = "Malteadas";
+const SNACK = "Snacks";
+const SPECIAL = "Snacks Especiales";
+const DESSERT = "Postres";
+const COMBO = "Combos";
 const MENU: SeedItem[] = [
-  // Café
-  { category: "Café", name: "Espresso", sizes: [[CH, 25]] },
-  { category: "Café", name: "Americano", sizes: [[M, 30]] },
-  { category: "Café", name: "Capuchino Clásico", sizes: [[CH, 40], [M, 45], [G, 50]] },
-  { category: "Café", name: "Capuchino de sabor", description: FLAVOR, sizes: [[CH, 45], [M, 50], [G, 55]] },
-  { category: "Café", name: "Latte Clásico", sizes: [[CH, 40], [M, 45], [G, 50]] },
-  { category: "Café", name: "Latte de sabor", description: FLAVOR, sizes: [[CH, 45], [M, 50], [G, 55]] },
-  // Sin café
-  { category: "Sin Café", name: "Chocolate", sizes: [[CH, 35], [M, 40], [G, 45]] },
-  { category: "Sin Café", name: "Tisana Frutal caliente", description: FLAVOR, sizes: [[M, 40], [G, 50]] },
-  { category: "Sin Café", name: "Soda Italiana", description: FLAVOR, sizes: [[G, 55]] },
-  // Barra fría
-  { category: "Barra Fría", name: "Tisana Frutal fría", description: FLAVOR, sizes: [[M, 40], [G, 50]] },
-  { category: "Barra Fría", name: "Latte Clásico frío", sizes: [[M, 45], [G, 50]] },
-  { category: "Barra Fría", name: "Latte frío de sabor", description: FLAVOR, sizes: [[M, 50], [G, 55]] },
-  { category: "Barra Fría", name: "Frappé Clásico", sizes: [[M, 50], [G, 55]] },
-  { category: "Barra Fría", name: "Frappé de sabor", description: FLAVOR, sizes: [[M, 55], [G, 60]] },
+  // Bebidas calientes
+  { category: HOT, icon: "☕", name: "Espresso", sizes: [["", 25]] },
+  { category: HOT, icon: "☕", name: "Americano", sizes: [["", 30]] },
+  { category: HOT, icon: "☕", name: "Capuchino Clásico", sizes: [[CH, 40], [M, 45], [G, 50]] },
+  { category: HOT, icon: "🍯", name: "Capuchino de sabor", description: FLAVOR, sizes: [[CH, 45], [M, 50], [G, 55]] },
+  { category: HOT, icon: "🥛", name: "Latte Clásico", sizes: [[CH, 55], [M, 55], [G, 55]] },
+  { category: HOT, icon: "🍮", name: "Latte de sabor", description: FLAVOR, sizes: [[CH, 55], [M, 55], [G, 55]] },
+  { category: HOT, icon: "🍫", name: "Capuchino Moka", sizes: [[CH, 45], [M, 50], [G, 55]] },
+  // Calientes sin café
+  { category: HOT_NC, icon: "🍫", name: "Chocolate", sizes: [[CH, 35], [M, 40], [G, 45]] },
+  { category: HOT_NC, icon: "🫖", name: "Chai", sizes: [[CH, 45], [M, 50], [G, 55]] },
+  { category: HOT_NC, icon: "🌺", name: "Tisana", description: FLAVOR, sizes: [[M, 40], [G, 50]], was: ["Tisana Frutal caliente"] },
+  // Bebidas frías (16oz)
+  { category: COLD, icon: "🧊", name: "Iced Capuchino Clásico", sizes: [[G, 50]] },
+  { category: COLD, icon: "🧋", name: "Iced Capuchino de sabor", description: FLAVOR, sizes: [[G, 55]] },
+  { category: COLD, icon: "🥛", name: "Iced Latte Clásico", sizes: [[G, 50]], was: ["Latte Clásico frío"] },
+  { category: COLD, icon: "🧋", name: "Iced Latte de sabor", description: FLAVOR, sizes: [[G, 55]], was: ["Latte frío de sabor"] },
+  { category: COLD, icon: "🥤", name: "Frappé Clásico", sizes: [[G, 55]] },
+  { category: COLD, icon: "🥤", name: "Frappé de sabor", description: FLAVOR, sizes: [[G, 60]] },
+  { category: COLD, icon: "🍹", name: "Tisana Frutal", description: FLAVOR, sizes: [[G, 50]], was: ["Tisana Frutal fría"] },
+  { category: COLD, icon: "🫧", name: "Soda Italiana", description: FLAVOR, sizes: [[G, 55]] },
   // Frappés especiales
-  ...["Gansito", "Magnum", "Mordisco", "Oreo", "Pingüino"].map(
-    (n): SeedItem => ({ category: "Frappés Especiales", name: `Frappé ${n}`, sizes: [[G, 85]] }),
-  ),
+  { category: FRAPPE, icon: "🍰", name: "Frappé Gansito", sizes: [[G, 85]] },
+  { category: FRAPPE, icon: "🍦", name: "Frappé tipo Magnum", sizes: [[G, 85]], was: ["Frappé Magnum"] },
+  { category: FRAPPE, icon: "🍨", name: "Frappé Mordisco", sizes: [[G, 85]] },
+  { category: FRAPPE, icon: "🐧", name: "Frappé Pingüino", sizes: [[G, 85]] },
+  { category: FRAPPE, icon: "🍪", name: "Frappé Oreo", sizes: [[G, 85]] },
   // Malteadas
-  { category: "Malteadas", name: "Malteada de Oreo", sizes: [[G, 55]] },
-  { category: "Malteadas", name: "Malteada de Fresa", sizes: [[G, 55]] },
-  // Postres
-  { category: "Postres", name: "Rol Maple Individual", sizes: [["", 35]] },
-  { category: "Postres", name: "Mega Rol", sizes: [["", 45]] },
-  { category: "Postres", name: "Volován", sizes: [["", 20]] },
-  { category: "Postres", name: "Croissant dulce", sizes: [["", 35]] },
-  { category: "Postres", name: "Galleta Estilo NY", sizes: [["", 45]] },
-  { category: "Postres", name: "Galleta Casera", sizes: [["", 25]] },
-  { category: "Postres", name: "Galletas de Mantequilla", description: "Bolsa con 6 galletas", sizes: [["", 50]] },
-  { category: "Postres", name: "Galleta de avena", sizes: [["", 7]] },
-  { category: "Postres", name: "Affogato", sizes: [["", 45]] },
+  { category: SHAKE, icon: "🍪", name: "Malteada de Oreo", sizes: [[G, 55]] },
+  { category: SHAKE, icon: "🍓", name: "Malteada de Fresa", sizes: [[G, 55]] },
   // Snacks
-  { category: "Snacks", name: "Baguette de Pechuga de Pollo", sizes: [["", 85]] },
-  { category: "Snacks", name: "Baguette de Jamón de Pavo", sizes: [["", 65]] },
-  { category: "Snacks", name: "Sándwich de Pechuga de Pollo", sizes: [["", 70]] },
-  { category: "Snacks", name: "Sándwich de Jamón de Pavo", sizes: [["", 40]] },
-  { category: "Snacks", name: "Pan Pizza", sizes: [["", 40]] },
-  // Combos
-  { category: "Combos", name: "Pan Pizza + Coca 355ml", sizes: [["", 60]] },
-  { category: "Combos", name: "Pan Pizza + Tisana", sizes: [["", 75]] },
-  { category: "Combos", name: "Pan Pizza + Soda Italiana", sizes: [["", 85]] },
-  { category: "Combos", name: "Rol individual + Café 16oz", sizes: [["", 80]] },
-  { category: "Combos", name: "Mega Rol + 2 cafés 16oz", sizes: [["", 140]] },
+  { category: SNACK, icon: "🥖", name: "Baguette de Pechuga de Pollo", sizes: [["", 85]] },
+  { category: SNACK, icon: "🥖", name: "Baguette de Jamón de Pavo", sizes: [["", 65]] },
+  { category: SNACK, icon: "🥪", name: "Sándwich de Pechuga de Pollo", sizes: [["", 70]] },
+  { category: SNACK, icon: "🥪", name: "Sándwich de Jamón de Pavo", sizes: [["", 40]] },
+  { category: SNACK, icon: "🍕", name: "Pan Pizza", sizes: [["", 40]] },
   // Snacks especiales: viernes (5) y sábado (6)
-  { category: "Snacks Especiales", name: "Boneless", description: "Individual (250 gramos). Viernes y sábados.", sizes: [["", 110]], days: "5,6" },
-  { category: "Snacks Especiales", name: "Palomitas de pollo", description: "Individual (250 gramos). Viernes y sábados.", sizes: [["", 100]], days: "5,6" },
+  { category: SPECIAL, icon: "🍗", name: "Boneless", description: "Individual (250 gramos). Viernes y sábados.", sizes: [["", 100]], days: "5,6" },
+  { category: SPECIAL, icon: "🍿", name: "Palomitas de pollo", description: "Individual (250 gramos). Viernes y sábados.", sizes: [["", 110]], days: "5,6" },
+  // Postres
+  { category: DESSERT, icon: "🍥", name: "Rol individual", sizes: [["", 35]], was: ["Rol Maple Individual"] },
+  { category: DESSERT, icon: "🍥", name: "Mega Rol", sizes: [["", 45]] },
+  { category: DESSERT, icon: "🥐", name: "Volován", sizes: [["", 20]] },
+  { category: DESSERT, icon: "🍞", name: "Pan de muerto", sizes: [["", 35]] },
+  { category: DESSERT, icon: "🍞", name: "Pan de muerto relleno", sizes: [["", 45]] },
+  { category: DESSERT, icon: "🍪", name: "Galleta Estilo NY Clásica", sizes: [["", 45]], was: ["Galleta Estilo NY"] },
+  { category: DESSERT, icon: "🍪", name: "Galleta Estilo NY de sabor", description: FLAVOR, sizes: [["", 50]] },
+  { category: DESSERT, icon: "🍪", name: "Galleta de avena", sizes: [["", 7]] },
+  { category: DESSERT, icon: "🍪", name: "Galleta casera", sizes: [["", 25]], was: ["Galleta Casera"] },
+  { category: DESSERT, icon: "🍪", name: "Galleta nutri", sizes: [["", 25]] },
+  // Sin precio en la hoja: queda oculta hasta que se le ponga precio en Admin > Menú
+  { category: DESSERT, icon: "🌾", name: "Barra Power Max", sizes: [["", 0]], inactive: true },
+  { category: DESSERT, icon: "🍫", name: "Barra Browny", sizes: [["", 15]] },
+  { category: DESSERT, icon: "🍫", name: "Barra Browny zero", sizes: [["", 15]] },
+  { category: DESSERT, icon: "🍫", name: "Browny", sizes: [["", 45]] },
+  { category: DESSERT, icon: "🍨", name: "Affogato", sizes: [["", 45]] },
+  // Combos
+  { category: COMBO, icon: "🍕", name: "Pan Pizza + Coca 355ml", sizes: [["", 60]] },
+  { category: COMBO, icon: "🍕", name: "Pan Pizza + Tisana", sizes: [["", 75]] },
+  { category: COMBO, icon: "🍕", name: "Pan Pizza + Soda Italiana", sizes: [["", 85]] },
+  { category: COMBO, icon: "🥪", name: "Sándwich + Coca 355ml", sizes: [["", 60]] },
+  { category: COMBO, icon: "🥪", name: "Sándwich + Tisana", sizes: [["", 75]] },
+  { category: COMBO, icon: "🥪", name: "Sándwich + Soda Italiana", sizes: [["", 85]] },
+  { category: COMBO, icon: "🍥", name: "Rol individual + Café 16oz", sizes: [["", 80]] },
+  { category: COMBO, icon: "🍥", name: "Mega Rol + 2 cafés 16oz", sizes: [["", 140]] },
 ];
-const MENU_VERSION = "allison-1";
+const MENU_VERSION = "allison-2";
+
+type Q = Query;
+
+/**
+ * Sincroniza el menú sin perder historial: actualiza precio/categoría/ícono de los productos
+ * existentes (conserva costo, existencias y foto), agrega los nuevos y oculta los que ya no están.
+ */
+async function syncMenu(q: Q) {
+  const existing = await q<{ id: number; name: string; size: string }>("SELECT id, name, size FROM products");
+  const norm = (x: string) => x.trim().toLowerCase();
+  const byKey = new Map(existing.map((p) => [`${norm(p.name)}|${norm(p.size)}`, p.id]));
+  const keep: number[] = [];
+  let sort = 0;
+  for (const item of MENU) {
+    for (const [size, pesos] of item.sizes) {
+      // Si el producto se vendía con otro tamaño (p.ej. Espresso "CH 8oz" → sin tamaño), también lo reconoce
+      const candidates = [item.name, ...(item.was ?? [])].flatMap((n) => [
+        `${norm(n)}|${norm(size)}`,
+        ...(item.sizes.length === 1 ? existing.filter((e) => norm(e.name) === norm(n)).map((e) => `${norm(e.name)}|${norm(e.size)}`) : []),
+      ]);
+      const id = candidates.map((k) => byKey.get(k)).find((v) => v !== undefined && !keep.includes(v));
+      const values = [item.name, size, item.category, item.description ?? "", pesos * 100, item.days ?? "", item.icon, item.inactive ? 0 : 1, sort++];
+      if (id !== undefined) {
+        await q(
+          `UPDATE products SET name=?, size=?, category=?, description=?, price=?, available_days=?, icon=?, active=?, sort=? WHERE id=?`,
+          [...values, id],
+        );
+        keep.push(id);
+      } else {
+        const [row] = await q<{ id: number }>(
+          `INSERT INTO products (name, size, category, description, price, available_days, icon, active, sort, cost)
+           VALUES (?,?,?,?,?,?,?,?,?,0) RETURNING id`,
+          values,
+        );
+        keep.push(row.id);
+      }
+    }
+  }
+  if (keep.length) {
+    await q(`UPDATE products SET active = 0 WHERE id NOT IN (${keep.map(() => "?").join(",")})`, keep);
+  }
+}
 
 const DEFAULT_SETTINGS: Record<string, string> = {
   business_name: "Café Allison",
@@ -256,23 +334,10 @@ async function init(b: Backend) {
     // Evita que dos instancias creen las tablas al mismo tiempo
     await q("SELECT pg_advisory_xact_lock(7212026)");
     for (const stmt of SCHEMA.split(";").map((s) => s.trim()).filter(Boolean)) await q(stmt);
-    // Carga el menú de Café Allison si aún no se ha cargado y no hay ventas registradas
+    // Actualiza el menú cuando cambia su versión (una sola vez)
     const [ver] = await q<{ value: string }>("SELECT value FROM settings WHERE key = 'menu_version'");
     if (ver?.value !== MENU_VERSION) {
-      const [{ n }] = await q<{ n: number }>("SELECT COUNT(*) AS n FROM order_items");
-      if (n === 0) {
-        await q("DELETE FROM inventory_movements WHERE item_type = 'product'");
-        await q("DELETE FROM products");
-        let sort = 0;
-        for (const item of MENU) {
-          for (const [size, pesos] of item.sizes) {
-            await q(
-              "INSERT INTO products (name, size, description, category, price, cost, available_days, sort) VALUES (?,?,?,?,?,0,?,?)",
-              [item.name, size, item.description ?? "", item.category, pesos * 100, item.days ?? "", sort++],
-            );
-          }
-        }
-      }
+      await syncMenu(q);
       await q(
         "INSERT INTO settings (key, value) VALUES ('menu_version', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
         [MENU_VERSION],

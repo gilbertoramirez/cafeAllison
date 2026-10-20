@@ -23,6 +23,9 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           <Field label="Nombre" className="lg:col-span-2">
             <input name="name" className="input" required defaultValue={editing?.name} />
           </Field>
+          <Field label="Ícono (emoji)" hint="Se muestra si no hay foto. Ej. ☕ 🍪 🍕">
+            <input name="icon" className="input text-xl" maxLength={8} defaultValue={editing?.icon} placeholder="☕" />
+          </Field>
           <Field label="Tamaño (opcional)" hint="Ej. CH 8oz. Los tamaños con el mismo nombre se agrupan en la tienda.">
             <input name="size" className="input" defaultValue={editing?.size} />
           </Field>
@@ -104,6 +107,9 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
               return (
                 <tr key={p.id} className={p.active ? "" : "opacity-50"}>
                   <td className="font-medium">
+                    <span className="mr-1.5" aria-hidden>
+                      {p.icon}
+                    </span>
                     {productLabel(p)}
                     {p.available_days && <span className="badge ml-2 bg-amber-50 text-amber-800">{daysLabel(p.available_days)}</span>}
                     {!p.active && <span className="badge ml-2 bg-gray-100">Oculto</span>}

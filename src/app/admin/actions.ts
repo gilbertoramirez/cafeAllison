@@ -106,6 +106,7 @@ export async function saveProduct(formData: FormData) {
     .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
   const values = [
     name,
+    str(formData, "icon").slice(0, 8),
     str(formData, "size"),
     days.length === 7 ? "" : days.join(","),
     str(formData, "description"),
@@ -120,13 +121,13 @@ export async function saveProduct(formData: FormData) {
   ];
   if (id) {
     await run(
-      `UPDATE products SET name=?, size=?, available_days=?, description=?, category=?, price=?, cost=?, track_stock=?, min_stock=?, image_url=?, active=?, sort=? WHERE id=?`,
+      `UPDATE products SET name=?, icon=?, size=?, available_days=?, description=?, category=?, price=?, cost=?, track_stock=?, min_stock=?, image_url=?, active=?, sort=? WHERE id=?`,
       [...values, id],
     );
   } else {
     await run(
-      `INSERT INTO products (name, size, available_days, description, category, price, cost, track_stock, min_stock, image_url, active, sort, stock)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO products (name, icon, size, available_days, description, category, price, cost, track_stock, min_stock, image_url, active, sort, stock)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [...values, int(formData, "stock")],
     );
   }

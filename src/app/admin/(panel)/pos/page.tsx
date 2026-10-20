@@ -9,6 +9,7 @@ export default async function PosPage() {
       products={products.map((p) => ({
         id: p.id,
         name: productLabel(p),
+        icon: p.icon,
         category: p.category,
         price: p.price,
         maxQty: p.track_stock ? Math.max(p.stock, 0) : 999,

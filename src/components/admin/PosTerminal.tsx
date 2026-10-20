@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { posSale } from "@/app/admin/actions";
 import { money } from "@/lib/format";
 
-type P = { id: number; name: string; category: string; price: number; maxQty: number };
+type P = { id: number; name: string; category: string; price: number; maxQty: number; icon: string };
 type Method = "efectivo" | "tarjeta" | "transferencia";
 
 export default function PosTerminal({ products }: { products: P[] }) {
@@ -196,6 +196,11 @@ export default function PosTerminal({ products }: { products: P[] }) {
                 onClick={() => add(p, 1)}
                 className="card relative p-3 text-left transition hover:border-cafe-300 active:scale-[0.97] disabled:opacity-40 lg:p-4"
               >
+                {p.icon && (
+                  <span className="mb-1 block text-2xl" aria-hidden>
+                    {p.icon}
+                  </span>
+                )}
                 <p className="pr-5 text-sm leading-snug font-medium lg:text-base">{p.name}</p>
                 <p className="text-sm text-cafe-700">{money(p.price)}</p>
                 {p.maxQty < 999 && <p className="text-xs text-cafe-500">{out ? "Agotado" : `Quedan ${p.maxQty}`}</p>}
