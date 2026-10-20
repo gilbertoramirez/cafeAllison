@@ -8,7 +8,7 @@ export class OrderError extends Error {}
 
 export type NewOrderInput = {
   channel: Order["channel"];
-  items: { productId: number; qty: number }[];
+  items: { productId: number; qty: number; note?: string }[];
   customerName?: string;
   phone?: string;
   deliveryType: Order["delivery_type"];
@@ -36,17 +36,24 @@ export type NewOrderInput = {
  * y descuenta inventario de los productos con control de stock.
  */
 export async function createOrder(input: NewOrderInput): Promise<Order> {
-  const merged = new Map<number, number>();
+  // Agrupa por producto + indicaciones (p.ej. dos frappés de sabores distintos son dos líneas)
+  const merged = new Map<string, { productId: number; qty: number; note: string }>();
+  const perProduct = new Map<number, number>();
   for (const it of input.items) {
     const qty = Math.floor(Number(it.qty));
     if (!Number.isInteger(it.productId) || qty <= 0) continue;
-    merged.set(it.productId, (merged.get(it.productId) ?? 0) + qty);
+    const note = String(it.note ?? "").trim().slice(0, 120);
+    const key = `${it.productId}|${note}`;
+    const line = merged.get(key) ?? { productId: it.productId, qty: 0, note };
+    line.qty += qty;
+    merged.set(key, line);
+    perProduct.set(it.productId, (perProduct.get(it.productId) ?? 0) + qty);
   }
   if (merged.size === 0) throw new OrderError("El pedido está vacío.");
-  for (const qty of merged.values()) if (qty > 99) throw new OrderError("Cantidad no válida.");
+  for (const qty of perProduct.values()) if (qty > 99) throw new OrderError("Cantidad no válida.");
 
   const orderId = await transaction(async (q) => {
-    const ids = [...merged.keys()];
+    const ids = [...perProduct.keys()];
     // FOR UPDATE bloquea los productos para no vender más existencias de las que hay
     const rows = await q<Product>(
       `SELECT * FROM products WHERE id IN (${ids.map(() => "?").join(",")}) FOR UPDATE`,
@@ -54,9 +61,7 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
     );
     const products = new Map(rows.map((p) => [p.id, p]));
 
-    let subtotal = 0;
-    const lines: { p: Product; qty: number }[] = [];
-    for (const [id, qty] of merged) {
+    for (const [id, qty] of perProduct) {
       const p = products.get(id);
       if (!p || !p.active) throw new OrderError("Uno de los productos ya no está disponible.");
       if (input.enforceDays && !availableToday(p.available_days)) {
@@ -65,8 +70,13 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
       if (p.track_stock && p.stock < qty) {
         throw new OrderError(`Solo quedan ${Math.max(p.stock, 0)} de "${productLabel(p)}".`);
       }
+    }
+    let subtotal = 0;
+    const lines: { p: Product; qty: number; note: string }[] = [];
+    for (const { productId, qty, note } of merged.values()) {
+      const p = products.get(productId)!;
       subtotal += p.price * qty;
-      lines.push({ p, qty });
+      lines.push({ p, qty, note });
     }
 
     if (input.minSubtotal && subtotal < input.minSubtotal) {
@@ -109,15 +119,11 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
       ],
     );
 
-    for (const { p, qty } of lines) {
-      await q("INSERT INTO order_items (order_id, product_id, name, unit_price, unit_cost, qty) VALUES (?,?,?,?,?,?)", [
-        newId,
-        p.id,
-        productLabel(p),
-        p.price,
-        p.cost,
-        qty,
-      ]);
+    for (const { p, qty, note } of lines) {
+      await q(
+        "INSERT INTO order_items (order_id, product_id, name, unit_price, unit_cost, qty, notes) VALUES (?,?,?,?,?,?,?)",
+        [newId, p.id, productLabel(p), p.price, p.cost, qty, note],
+      );
       if (p.track_stock) {
         await q("UPDATE products SET stock = stock - ? WHERE id = ?", [qty, p.id]);
         await q(

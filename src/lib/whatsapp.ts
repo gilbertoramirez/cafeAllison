@@ -12,7 +12,7 @@ export function orderMessage(order: Order, items: OrderItem[], trackUrl: string)
   const lines = [
     `¡Hola! Quiero hacer este pedido (${orderCode(order.id)}):`,
     "",
-    ...items.map((i) => `• ${i.qty} × ${i.name} — ${money(i.unit_price * i.qty)}`),
+    ...items.map((i) => `• ${i.qty} × ${i.name}${i.notes ? ` (${i.notes})` : ""} — ${money(i.unit_price * i.qty)}`),
     "",
     order.delivery_type === "domicilio" ? `Envío: ${order.delivery_fee ? money(order.delivery_fee) : "gratis"}` : null,
     `*Total: ${money(order.total)}*`,

@@ -60,6 +60,7 @@ export type OrderItem = {
   unit_price: number;
   unit_cost: number;
   qty: number;
+  notes: string;
 };
 
 export type Expense = {

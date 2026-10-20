@@ -93,6 +93,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/pe
           <div key={i.id} className="flex justify-between">
             <span>
               {i.qty} × {i.name}
+              {i.notes && <span className="block text-xs text-cafe-600">↳ {i.notes}</span>}
             </span>
             <span>{money(i.unit_price * i.qty)}</span>
           </div>

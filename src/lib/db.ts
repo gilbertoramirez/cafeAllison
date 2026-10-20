@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   qty INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_items_order ON order_items(order_id);
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS expenses (
   id SERIAL PRIMARY KEY,
   date TEXT NOT NULL,
@@ -180,7 +181,8 @@ CREATE TABLE IF NOT EXISTS settings (
 // Menú de Café Allison (precios en pesos). Se puede editar desde Admin > Menú.
 // Cada tamaño es un producto; la tienda los agrupa por nombre.
 type SeedItem = { name: string; category: string; description?: string; sizes: [string, number][]; days?: string };
-const FLAVOR = "Indica el sabor en las notas del pedido.";
+const FLAVOR = "Elige tu sabor favorito.";
+const OLD_FLAVOR = "Indica el sabor en las notas del pedido.";
 const CH = "CH 8oz";
 const M = "M 12oz";
 const G = "G 16oz";
@@ -276,6 +278,7 @@ async function init(b: Backend) {
         [MENU_VERSION],
       );
     }
+    await q("UPDATE products SET description = ? WHERE description = ?", [FLAVOR, OLD_FLAVOR]);
     for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) {
       await q("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING", [k, v]);
     }

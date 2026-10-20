@@ -91,6 +91,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                   <li key={i.id} className="flex justify-between">
                     <span>
                       {i.qty} × {i.name}
+                      {i.notes && <span className="block text-xs text-amber-800">↳ {i.notes}</span>}
                     </span>
                     <span className="tabular-nums">{money(i.unit_price * i.qty)}</span>
                   </li>

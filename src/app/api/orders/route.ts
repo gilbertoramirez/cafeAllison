@@ -8,7 +8,7 @@ import { run } from "@/lib/db";
 import { onlyDigits } from "@/lib/format";
 
 type Body = {
-  items?: { productId: number; qty: number }[];
+  items?: { productId: number; qty: number; note?: string }[];
   customerName?: string;
   phone?: string;
   deliveryType?: string;
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
   try {
     order = await createOrder({
       channel: paymentMethod === "whatsapp" ? "whatsapp" : "web",
-      items: Array.isArray(body.items) ? body.items.map((i) => ({ productId: Number(i.productId), qty: Number(i.qty) })) : [],
+      items: Array.isArray(body.items) ? body.items.map((i) => ({ productId: Number(i.productId), qty: Number(i.qty), note: String(i.note ?? "") })) : [],
       customerName: name,
       phone,
       deliveryType,
@@ -112,7 +112,11 @@ export async function POST(req: Request) {
       line_items: [
         ...items.map((i) => ({
           quantity: i.qty,
-          price_data: { currency: "mxn", unit_amount: i.unit_price, product_data: { name: i.name } },
+          price_data: {
+            currency: "mxn",
+            unit_amount: i.unit_price,
+            product_data: { name: i.notes ? `${i.name} · ${i.notes}` : i.name },
+          },
         })),
         ...(order.delivery_fee > 0
           ? [
