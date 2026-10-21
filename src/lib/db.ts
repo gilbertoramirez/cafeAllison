@@ -144,6 +144,9 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS postal_code TEXT NOT NULL DEFAULT '';
+CREATE SEQUENCE IF NOT EXISTS orders_change_seq;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS change_seq BIGINT NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_orders_change ON orders(change_seq);
 CREATE TABLE IF NOT EXISTS delivery_zones (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,

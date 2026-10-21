@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import AutoRefresh from "@/components/AutoRefresh";
+import LiveUpdates from "@/components/LiveUpdates";
 import { dateTime, money } from "@/lib/format";
 import { getOrderByToken, getOrderItems, orderCode } from "@/lib/orders";
 import { refreshStripeOrder } from "@/lib/payments";
@@ -33,10 +33,12 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/pe
 
   return (
     <main className="mx-auto w-full max-w-xl flex-1 space-y-4 px-4 py-8">
-      {!finished && <AutoRefresh seconds={20} />}
-      <Link href="/" className="text-sm text-cafe-700 underline">
-        ← {settings.business_name}
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link href="/" className="text-sm text-cafe-700 underline">
+          ← {settings.business_name}
+        </Link>
+        {!finished && <LiveUpdates url={`/api/live/pedido/${order.token}`} mode="order" />}
+      </div>
       <div>
         <h1 className="text-2xl font-bold">Pedido {orderCode(order.id)}</h1>
         <p className="text-sm text-cafe-600">{dateTime(order.created_at)}</p>

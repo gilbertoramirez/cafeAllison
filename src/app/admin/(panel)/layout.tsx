@@ -3,6 +3,7 @@ import { get, isEphemeralDb } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { logout } from "../actions";
 import AdminNav, { MobileTabBar } from "@/components/admin/AdminNav";
+import LiveUpdates from "@/components/LiveUpdates";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       {/* Celular: encabezado compacto */}
       <header className="sticky top-0 z-30 flex items-center justify-between bg-cafe-900 px-4 py-2.5 text-white md:hidden">
         <p className="font-semibold">{settings.business_name}</p>
-        <span className="text-xs text-cafe-300">Administración</span>
+
       </header>
 
       <main className="min-w-0 flex-1 p-4 pb-24 md:p-6 md:pb-6">
@@ -42,6 +43,11 @@ export default async function PanelLayout({ children }: { children: React.ReactN
         )}
         {children}
       </main>
+
+      {/* Una sola conexión en tiempo real por pestaña; indicador arriba a la derecha */}
+      <div className="fixed top-2.5 right-4 z-40 rounded-full bg-white/90 px-2.5 py-1 shadow-sm md:top-4 md:right-6">
+        <LiveUpdates url="/api/live/admin" mode="admin" />
+      </div>
 
       <MobileTabBar activeOrders={activeOrders} logout={logout} />
     </div>

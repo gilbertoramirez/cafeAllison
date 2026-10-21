@@ -93,8 +93,9 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
 
     const [{ id: newId }] = await q<{ id: number }>(
       `INSERT INTO orders (token, channel, status, customer_name, phone, delivery_type, address, address_ref,
-         lat, lng, notes, payment_method, payment_status, cash_given, subtotal, delivery_fee, total, created_at, paid_at, postal_code)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
+         lat, lng, notes, payment_method, payment_status, cash_given, subtotal, delivery_fee, total, created_at, paid_at, postal_code,
+         change_seq)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, nextval('orders_change_seq')) RETURNING id`,
       [
         token,
         input.channel,
@@ -170,7 +171,7 @@ export async function setOrderStatus(orderId: number, status: OrderStatus) {
     const prev = row?.status;
     if (!prev || prev === status) return;
     if (prev === "cancelado") throw new OrderError("Un pedido cancelado no se puede reabrir.");
-    await q("UPDATE orders SET status = ? WHERE id = ?", [status, orderId]);
+    await q("UPDATE orders SET status = ?, change_seq = nextval('orders_change_seq') WHERE id = ?", [status, orderId]);
     if (status === "cancelado") {
       const items = await q<{ product_id: number; qty: number }>(
         `SELECT oi.product_id, oi.qty FROM order_items oi JOIN products p ON p.id = oi.product_id
@@ -190,7 +191,8 @@ export async function setOrderStatus(orderId: number, status: OrderStatus) {
 
 export async function markOrderPaid(orderId: number) {
   await run(
-    "UPDATE orders SET payment_status = 'pagado', paid_at = COALESCE(paid_at, ?) WHERE id = ? AND status != 'cancelado'",
+    `UPDATE orders SET payment_status = 'pagado', paid_at = COALESCE(paid_at, ?), change_seq = nextval('orders_change_seq')
+     WHERE id = ? AND status != 'cancelado' AND payment_status <> 'pagado'`,
     [new Date().toISOString(), orderId],
   );
 }

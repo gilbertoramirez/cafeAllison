@@ -1,4 +1,3 @@
-import AutoRefresh from "@/components/AutoRefresh";
 import { PageTitle } from "@/components/admin/ui";
 import { all } from "@/lib/db";
 import { dateTime, localDate, money, startOfLocalDay } from "@/lib/format";
@@ -46,7 +45,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   return (
     <div>
-      <AutoRefresh seconds={15} />
       <PageTitle
         actions={
           <div className="flex gap-1">
