@@ -3,6 +3,7 @@ import { centsToInput, money } from "@/lib/format";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { parseCps } from "@/lib/delivery";
 import { deleteZone, saveSettings, saveZone } from "../../actions";
+import PrinterSettingsCard from "@/components/admin/PrinterSettingsCard";
 
 export default async function SettingsPage() {
   const [s, delivery] = await Promise.all([getSettings(), getDeliveryRules()]);
@@ -115,6 +116,8 @@ export default async function SettingsPage() {
           </p>
         )}
       </section>
+
+      <PrinterSettingsCard businessName={s.business_name} />
 
       <div className="card space-y-1 text-sm">
         <h2 className="font-semibold">Pagos en línea (Stripe)</h2>

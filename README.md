@@ -16,6 +16,7 @@ Sistema para la cafetería con dos partes:
 - **Inventario**: existencias de productos (pan, comida) e **insumos** (café, leche, vasos), registro de **resurtido** que crea el gasto automáticamente y actualiza el costo, ajustes por merma o conteo, historial de movimientos.
 - **Gastos**: renta, servicios, sueldos, resurtido, etc. Gastos **por pagar** con fecha de vencimiento y **recurrentes** (al pagar la renta se agenda la del siguiente mes).
 - **Finanzas**: ventas, costo de lo vendido, utilidad bruta y neta, flujo de efectivo, ventas por día, productos más vendidos, gastos por categoría y ventas por canal/forma de pago.
+- **Impresora de tickets** (en *Ajustes*, por dispositivo): Bluetooth o USB directo desde Chrome (ESC/POS, corta papel y abre cajón), app **RawBT** en Android, o el diálogo de impresión del navegador. Ticket de 58 u 80 mm, impresión automática al cobrar y de comandas al llegar pedidos en línea.
 - **Ajustes**: nombre, WhatsApp, horario, dirección, costo de envío, pedido mínimo, abrir/cerrar pedidos en línea.
 
 ## Empezar en tu computadora

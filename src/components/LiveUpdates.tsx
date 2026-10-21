@@ -13,7 +13,47 @@ const STATUS_TEXT: Record<string, string> = {
   cancelado: "cancelado",
 };
 
-type Msg = { v: number | string; online?: number; pending?: number; status?: string; payment?: string };
+type Msg = {
+  v: number | string;
+  online?: number;
+  pending?: number;
+  lastOnline?: number;
+  status?: string;
+  payment?: string;
+};
+
+const PRINTED_KEY = "cafe_last_printed_online";
+
+/**
+ * Imprime los pedidos en línea nuevos si este dispositivo lo tiene activado.
+ * Usa localStorage para que varias pestañas del mismo dispositivo no impriman doble.
+ */
+async function autoPrintOnline(lastOnline: number, notify: (t: string) => void) {
+  const { loadPrinter, fetchTickets, printTickets } = await import("@/lib/printer");
+  const settings = loadPrinter();
+  let printed = 0;
+  try {
+    printed = Number(localStorage.getItem(PRINTED_KEY) ?? NaN);
+  } catch {}
+  if (!Number.isFinite(printed)) {
+    // Primera vez en este dispositivo: no imprime pedidos anteriores
+    try {
+      localStorage.setItem(PRINTED_KEY, String(lastOnline));
+    } catch {}
+    return;
+  }
+  if (lastOnline <= printed) return;
+  try {
+    localStorage.setItem(PRINTED_KEY, String(lastOnline));
+  } catch {}
+  if (!settings.autoPrintOnline) return;
+  try {
+    const tickets = await fetchTickets(`after=${printed}`);
+    await printTickets(tickets, settings);
+  } catch (e) {
+    notify(`⚠️ No se imprimió la comanda: ${e instanceof Error ? e.message : e}`);
+  }
+}
 
 /** Sonido corto generado en el navegador (no requiere archivos). */
 function chime() {
@@ -86,6 +126,9 @@ export default function LiveUpdates({ url, mode }: { url: string; mode: "admin" 
         pending.current = msg.pending;
         const base = document.title.replace(/^\(\d+\)\s*/, "");
         document.title = msg.pending > 0 ? `(${msg.pending}) ${base}` : base;
+      }
+      if (mode === "admin" && typeof msg.lastOnline === "number") {
+        autoPrintOnline(msg.lastOnline, setToast);
       }
       if (!prev || prev.v === msg.v) return; // primer mensaje: solo línea base
       router.refresh();

@@ -8,6 +8,7 @@ import { ORDER_STATUS_LABEL, PAYMENT_LABEL } from "@/lib/types";
 import { siteUrl } from "@/lib/url";
 import { statusMessage, waLink } from "@/lib/whatsapp";
 import { markPaid, updateOrderStatus } from "../../actions";
+import PrintButton from "@/components/admin/PrintButton";
 
 const FILTERS = {
   activos: "Activos",
@@ -150,6 +151,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     <button className="btn-secondary">💵 Marcar pagado</button>
                   </form>
                 )}
+                <PrintButton orderId={o.id} />
                 {o.phone && (
                   <a
                     className="btn-whatsapp"
