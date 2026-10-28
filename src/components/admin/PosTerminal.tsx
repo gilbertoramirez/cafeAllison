@@ -3,8 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { posSale } from "@/app/admin/actions";
 import { money } from "@/lib/format";
-import { loadPrinter, printOrders } from "@/lib/printer";
-import PrintButton from "./PrintButton";
+import SaleClosedDialog from "./SaleClosedDialog";
 
 type P = { id: number; name: string; category: string; price: number; maxQty: number; icon: string };
 type Method = "efectivo" | "tarjeta" | "transferencia";
@@ -16,7 +15,8 @@ export default function PosTerminal({ products }: { products: P[] }) {
   const [method, setMethod] = useState<Method>("efectivo");
   const [cash, setCash] = useState("");
   const [customer, setCustomer] = useState("");
-  const [msg, setMsg] = useState<{ ok: boolean; text: string; orderId?: number } | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [closed, setClosed] = useState<{ orderId: number; change: number } | null>(null); // venta recién cerrada
   const [pending, start] = useTransition();
   const [sheet, setSheet] = useState(false); // ticket abierto en celular
 
@@ -53,18 +53,8 @@ export default function PosTerminal({ products }: { products: P[] }) {
         customerName: customer,
       });
       if (res.ok) {
-        setMsg({
-          ok: true,
-          text: `Venta #${String(res.orderId).padStart(4, "0")} registrada · ${money(res.total)}${
-            res.change > 0 ? ` · Cambio: ${money(res.change)}` : ""
-          }`,
-          orderId: res.orderId,
-        });
-        if (loadPrinter().autoPrintSale) {
-          printOrders([res.orderId]).catch((e) =>
-            setMsg((m) => m && { ...m, text: `${m.text} · No se imprimió: ${e instanceof Error ? e.message : e}` }),
-          );
-        }
+        setMsg(null);
+        setClosed({ orderId: res.orderId, change: res.change });
         setTicket({});
         setCash("");
         setCustomer("");
@@ -147,10 +137,7 @@ export default function PosTerminal({ products }: { products: P[] }) {
         )}
 
         {msg && (
-          <div className={`space-y-2 rounded-lg p-2 text-sm ${msg.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>
-            <p>{msg.text}</p>
-            {msg.orderId && <PrintButton orderId={msg.orderId} className="btn-secondary w-full py-1.5" />}
-          </div>
+          <p className={`rounded-lg p-2 text-sm ${msg.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg.text}</p>
         )}
 
         <button
@@ -191,12 +178,6 @@ export default function PosTerminal({ products }: { products: P[] }) {
             </button>
           ))}
         </div>
-        {msg?.ok && (
-          <div className="mb-3 flex items-center justify-between gap-2 rounded-lg bg-green-50 p-2 text-sm text-green-800 lg:hidden">
-            <p>{msg.text}</p>
-            {msg.orderId && <PrintButton orderId={msg.orderId} className="btn-secondary shrink-0 px-3 py-1.5" />}
-          </div>
-        )}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
           {shown.map((p) => {
             const out = p.maxQty <= 0;
@@ -242,6 +223,7 @@ export default function PosTerminal({ products }: { products: P[] }) {
           <span className="text-lg font-semibold tabular-nums">Cobrar {money(total)}</span>
         </button>
       )}
+      {closed && <SaleClosedDialog orderId={closed.orderId} change={closed.change} onClose={() => setClosed(null)} />}
       {sheet && (
         <div className="fixed inset-0 z-[60] bg-black/40 lg:hidden" onClick={() => setSheet(false)}>
           <div
