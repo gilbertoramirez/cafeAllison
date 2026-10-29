@@ -165,7 +165,8 @@ export async function itemsForOrders(orderIds: number[]): Promise<Map<number, Or
 }
 
 /** Cambia el estado; al cancelar regresa el stock al inventario. */
-export async function setOrderStatus(orderId: number, status: OrderStatus) {
+/** Cambia el estado. Al cancelar regresa el stock y guarda motivo y fecha. */
+export async function setOrderStatus(orderId: number, status: OrderStatus, reason = "") {
   await transaction(async (q) => {
     const [row] = await q<{ status: OrderStatus }>("SELECT status FROM orders WHERE id = ? FOR UPDATE", [orderId]);
     const prev = row?.status;
@@ -173,6 +174,11 @@ export async function setOrderStatus(orderId: number, status: OrderStatus) {
     if (prev === "cancelado") throw new OrderError("Un pedido cancelado no se puede reabrir.");
     await q("UPDATE orders SET status = ?, change_seq = nextval('orders_change_seq') WHERE id = ?", [status, orderId]);
     if (status === "cancelado") {
+      await q("UPDATE orders SET cancel_reason = ?, cancelled_at = ? WHERE id = ?", [
+        reason.trim().slice(0, 200),
+        new Date().toISOString(),
+        orderId,
+      ]);
       const items = await q<{ product_id: number; qty: number }>(
         `SELECT oi.product_id, oi.qty FROM order_items oi JOIN products p ON p.id = oi.product_id
          WHERE oi.order_id = ? AND p.track_stock = 1`,
@@ -186,6 +192,19 @@ export async function setOrderStatus(orderId: number, status: OrderStatus) {
         );
       }
     }
+  });
+}
+
+/** Borra por completo un pedido que ya fue cancelado (pruebas o errores de captura). */
+export async function deleteCancelledOrder(orderId: number) {
+  await transaction(async (q) => {
+    const [row] = await q<{ status: OrderStatus }>("SELECT status FROM orders WHERE id = ? FOR UPDATE", [orderId]);
+    if (!row) return;
+    if (row.status !== "cancelado") throw new OrderError("Primero cancela la venta; solo se pueden eliminar ventas canceladas.");
+    // Los movimientos de venta y de cancelación se compensan, así que se borran juntos
+    await q("DELETE FROM inventory_movements WHERE order_id = ?", [orderId]);
+    await q("DELETE FROM order_items WHERE order_id = ?", [orderId]);
+    await q("DELETE FROM orders WHERE id = ?", [orderId]);
   });
 }
 

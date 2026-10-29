@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { checkPassword, endSession, passwordConfigured, requireAdmin, startSession } from "@/lib/auth";
 import { get, run, transaction } from "@/lib/db";
 import { addDays, addMonths, localDate, toCents } from "@/lib/format";
-import { createOrder, markOrderPaid, OrderError, setOrderStatus } from "@/lib/orders";
+import { createOrder, deleteCancelledOrder, markOrderPaid, OrderError, setOrderStatus } from "@/lib/orders";
 import { setSetting } from "@/lib/settings";
 import { parseCps } from "@/lib/delivery";
 import { ticketsByIds } from "@/lib/tickets-server";
@@ -92,6 +92,33 @@ export async function updateOrderStatus(orderId: number, status: OrderStatus) {
   if (!(status in ORDER_STATUS_LABEL)) return;
   await setOrderStatus(orderId, status);
   done();
+}
+
+/** Cancelar una venta o pedido (también los ya entregados, p. ej. ventas de caja). */
+export async function cancelOrder(orderId: number, reason: string): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  if (!reason.trim()) return { ok: false, error: "Escribe el motivo de la cancelación." };
+  try {
+    await setOrderStatus(orderId, "cancelado", reason);
+    done();
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof OrderError) return { ok: false, error: e.message };
+    throw e;
+  }
+}
+
+/** Eliminar definitivamente (solo ventas ya canceladas). */
+export async function deleteOrder(orderId: number): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  try {
+    await deleteCancelledOrder(orderId);
+    done();
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof OrderError) return { ok: false, error: e.message };
+    throw e;
+  }
 }
 
 export async function markPaid(orderId: number) {

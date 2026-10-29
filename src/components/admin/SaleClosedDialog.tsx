@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import TicketPreview from "@/components/TicketPreview";
+import CancelOrderControls from "./CancelOrderControls";
 import { money } from "@/lib/format";
 import {
   connectBluetooth,
@@ -46,6 +47,7 @@ export default function SaleClosedDialog({ sale, onClose }: { sale: SaleResult; 
     sale.error ? { kind: "error", text: sale.error } : sale.printed ? { kind: "ok" } : { kind: "idle" },
   );
   const [drawerOpened, setDrawerOpened] = useState(Boolean(sale.drawerOpened));
+  const [cancelled, setCancelled] = useState(false);
   const [device, setDevice] = useState<string | null>(() => connectedName());
   const needsConnection = (settings.method === "bluetooth" || settings.method === "usb") && !device;
   const drawerAvailable = Boolean(ticket && shouldOpenDrawer(ticket, settings));
@@ -160,7 +162,9 @@ export default function SaleClosedDialog({ sale, onClose }: { sale: SaleResult; 
           {print.kind === "error" && <p className="rounded-lg bg-red-50 p-2 text-sm text-red-700">No se imprimió: {print.text}</p>}
 
           <div className="flex gap-2">
-            {needsConnection ? (
+            {cancelled ? (
+              <p className="flex-1 rounded-lg bg-gray-100 p-3 text-sm text-gray-700">✖ Venta cancelada. Las existencias regresaron al inventario.</p>
+            ) : needsConnection ? (
               <button className="btn-primary flex-1 py-3 text-base" disabled={print.kind === "busy"} onClick={connect}>
                 {print.kind === "busy" ? "Conectando…" : `📶 Conectar e imprimir`}
               </button>
@@ -177,6 +181,11 @@ export default function SaleClosedDialog({ sale, onClose }: { sale: SaleResult; 
               Nueva venta
             </button>
           </div>
+          {!cancelled && (
+            <div className="text-center">
+              <CancelOrderControls orderId={orderId} cancelled={false} compact onDone={() => setCancelled(true)} />
+            </div>
+          )}
         </div>
       </div>
     </div>

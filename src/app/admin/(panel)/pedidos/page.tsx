@@ -9,10 +9,13 @@ import { siteUrl } from "@/lib/url";
 import { statusMessage, waLink } from "@/lib/whatsapp";
 import { markPaid, updateOrderStatus } from "../../actions";
 import PrintButton from "@/components/admin/PrintButton";
+import CancelOrderControls from "@/components/admin/CancelOrderControls";
 
 const FILTERS = {
   activos: "Activos",
   hoy: "Hoy",
+  caja: "Caja hoy",
+  canceladas: "Canceladas",
   todos: "Últimos 200",
 } as const;
 
@@ -35,12 +38,17 @@ function nextSteps(o: Order): OrderStatus[] {
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ f?: string }> }) {
   const f = ((await searchParams).f ?? "activos") as keyof typeof FILTERS;
+  const today = startOfLocalDay(localDate());
   const where =
     f === "hoy"
-      ? ["created_at >= ?", [startOfLocalDay(localDate())]]
-      : f === "todos"
-        ? ["1=1", []]
-        : ["status NOT IN ('entregado','cancelado')", []];
+      ? ["created_at >= ?", [today]]
+      : f === "caja"
+        ? ["channel = 'mostrador' AND created_at >= ?", [today]]
+        : f === "canceladas"
+          ? ["status = 'cancelado'", []]
+          : f === "todos"
+            ? ["1=1", []]
+            : ["status NOT IN ('entregado','cancelado')", []];
   const orders = await all<Order>(`SELECT * FROM orders WHERE ${where[0]} ORDER BY created_at DESC LIMIT 200`, where[1] as string[]);
   const [items, settings, base] = await Promise.all([itemsForOrders(orders.map((o) => o.id)), getSettings(), siteUrl()]);
 
@@ -48,12 +56,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     <div>
       <PageTitle
         actions={
-          <div className="flex gap-1">
+          <div className="-mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0">
             {Object.entries(FILTERS).map(([k, l]) => (
               <a
                 key={k}
                 href={`?f=${k}`}
-                className={`rounded-full px-3 py-1 text-sm ${f === k ? "bg-cafe-800 text-white" : "bg-white ring-1 ring-cafe-200"}`}
+                className={`shrink-0 rounded-full px-3 py-1 text-sm ${f === k ? "bg-cafe-800 text-white" : "bg-white ring-1 ring-cafe-200"}`}
               >
                 {l}
               </a>
@@ -78,8 +86,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     {orderCode(o.id)} {o.customer_name && `· ${o.customer_name}`}
                   </p>
                   <p className="text-xs text-cafe-600">
-                    {dateTime(o.created_at)} · {o.channel === "mostrador" ? "Mostrador" : o.channel === "whatsapp" ? "WhatsApp" : "Web"} ·{" "}
-                    {o.delivery_type === "domicilio" ? "🛵 Domicilio" : o.delivery_type === "recoger" ? "🏪 Recoger" : "Mostrador"}
+                    {dateTime(o.created_at)} ·{" "}
+                    {o.channel === "mostrador"
+                      ? "🧾 Venta en caja"
+                      : `${o.channel === "whatsapp" ? "WhatsApp" : "Web"} · ${o.delivery_type === "domicilio" ? "🛵 Domicilio" : "🏪 Recoger"}`}
                   </p>
                 </div>
                 <span className={`badge ${STATUS_COLOR[o.status]}`}>{ORDER_STATUS_LABEL[o.status]}</span>
@@ -139,6 +149,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                 </div>
               )}
               {o.notes && <p className="rounded-lg bg-amber-50 p-2">📝 {o.notes}</p>}
+              {o.status === "cancelado" && (
+                <p className="rounded-lg bg-gray-100 p-2 text-gray-700">
+                  ✖ Cancelada{o.cancelled_at ? ` el ${dateTime(o.cancelled_at)}` : ""}
+                  {o.cancel_reason ? ` · ${o.cancel_reason}` : ""}
+                </p>
+              )}
 
               <div className="flex flex-wrap gap-2">
                 {nextSteps(o).map((s) => (
@@ -162,11 +178,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     WhatsApp
                   </a>
                 )}
-                {o.status !== "cancelado" && o.status !== "entregado" && (
-                  <form action={updateOrderStatus.bind(null, o.id, "cancelado")}>
-                    <button className="btn text-red-700 hover:bg-red-50">Cancelar</button>
-                  </form>
-                )}
+                <CancelOrderControls
+                  orderId={o.id}
+                  cancelled={o.status === "cancelado"}
+                  paidOnline={o.payment_method === "stripe" && o.payment_status === "pagado"}
+                />
               </div>
             </article>
           );

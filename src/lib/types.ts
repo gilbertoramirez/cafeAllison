@@ -51,6 +51,8 @@ export type Order = {
   stripe_session_id: string | null;
   created_at: string;
   paid_at: string | null;
+  cancel_reason: string;
+  cancelled_at: string | null;
 };
 
 export type OrderItem = {
