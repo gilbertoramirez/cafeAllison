@@ -8,6 +8,8 @@ import { addDays, addMonths, localDate, toCents } from "@/lib/format";
 import { createOrder, markOrderPaid, OrderError, setOrderStatus } from "@/lib/orders";
 import { setSetting } from "@/lib/settings";
 import { parseCps } from "@/lib/delivery";
+import { ticketsByIds } from "@/lib/tickets-server";
+import type { TicketData } from "@/lib/ticket";
 import type { Expense, OrderStatus, PaymentMethod } from "@/lib/types";
 import { EXPENSE_CATEGORIES, ORDER_STATUS_LABEL, productLabel } from "@/lib/types";
 
@@ -48,7 +50,9 @@ export async function posSale(input: {
   paymentMethod: PaymentMethod;
   cashGiven: number | null; // centavos
   customerName: string;
-}): Promise<{ ok: true; orderId: number; total: number; change: number } | { ok: false; error: string }> {
+}): Promise<
+  { ok: true; orderId: number; total: number; change: number; ticket: TicketData | null } | { ok: false; error: string }
+> {
   await requireAdmin();
   const pm: PaymentMethod = ["efectivo", "tarjeta", "transferencia"].includes(input.paymentMethod)
     ? input.paymentMethod
@@ -66,11 +70,14 @@ export async function posSale(input: {
       cashMustCover: true,
     });
     done();
+    // El ticket va en la respuesta para imprimir y abrir el cajón de inmediato (sin otra consulta)
+    const [ticket] = await ticketsByIds([order.id]);
     return {
       ok: true,
       orderId: order.id,
       total: order.total,
       change: pm === "efectivo" && input.cashGiven ? input.cashGiven - order.total : 0,
+      ticket: ticket ?? null,
     };
   } catch (e) {
     if (e instanceof OrderError) return { ok: false, error: e.message };

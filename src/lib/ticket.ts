@@ -174,6 +174,12 @@ export function escpos(
     bytes.push(0x0a, 0x0a, 0x0a);
     if (opts.cut !== false) bytes.push(GS, 0x56, 0x42, 0x00); // avanzar y cortar
   }
-  if (opts.drawer) bytes.push(ESC, 0x70, 0, 25, 250); // abrir cajón
+  if (opts.drawer) bytes.push(...DRAWER_KICK);
   return Uint8Array.from(bytes);
+}
+
+/** Pulso al conector RJ11 de la impresora para abrir el cajón de dinero. */
+const DRAWER_KICK = [0x1b, 0x70, 0, 25, 250];
+export function drawerBytes(): Uint8Array {
+  return Uint8Array.from([0x1b, 0x40, ...DRAWER_KICK]);
 }

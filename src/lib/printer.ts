@@ -7,7 +7,7 @@
  *  - browser:   diálogo de impresión del sistema (cualquier impresora instalada).
  * La configuración se guarda en este dispositivo.
  */
-import { colsFor, escpos, ticketLines, type TicketData } from "./ticket";
+import { colsFor, drawerBytes, escpos, ticketLines, type TicketData } from "./ticket";
 
 export type PrintMethod = "browser" | "bluetooth" | "usb" | "rawbt";
 export type PrinterSettings = {
@@ -209,7 +209,32 @@ export async function fetchTickets(query: string): Promise<TicketData[]> {
   return (await res.json()).tickets;
 }
 
-export async function printTickets(tickets: TicketData[], s: PrinterSettings = loadPrinter()) {
+async function send(data: Uint8Array, s: PrinterSettings) {
+  if (s.method === "bluetooth") await sendBluetooth(data);
+  else if (s.method === "usb") await sendUsb(data);
+  else if (s.method === "rawbt") sendRawBT(data);
+  else throw new Error("Con “Diálogo de impresión” no se puede abrir el cajón. Elige Bluetooth, USB o RawBT.");
+}
+
+/** true si conviene abrir el cajón para esta venta (mostrador en efectivo con la opción activada). */
+export function shouldOpenDrawer(t: TicketData, s: PrinterSettings = loadPrinter()) {
+  return s.drawer && s.method !== "browser" && t.order.channel === "mostrador" && t.order.payment_method === "efectivo";
+}
+
+/** Abre el cajón de dinero sin imprimir. */
+export async function openDrawer(s: PrinterSettings = loadPrinter()) {
+  await send(drawerBytes(), s);
+}
+
+/**
+ * Imprime tickets. El cajón solo se abre si se pide explícitamente (al cobrar),
+ * nunca al reimprimir ni en comandas de pedidos en línea.
+ */
+export async function printTickets(
+  tickets: TicketData[],
+  s: PrinterSettings = loadPrinter(),
+  opts: { openDrawer?: boolean } = {},
+) {
   if (tickets.length === 0) return;
   if (s.method === "browser") return printWithBrowser(`ids=${tickets.map((t) => t.order.id).join(",")}`, s.width);
   const cols = colsFor(s.width);
@@ -218,8 +243,7 @@ export async function printTickets(tickets: TicketData[], s: PrinterSettings = l
       cut: s.cut,
       copies: s.copies,
       accents: s.accents,
-      // el cajón solo se abre en ventas de mostrador en efectivo
-      drawer: s.drawer && t.order.channel === "mostrador" && t.order.payment_method === "efectivo",
+      drawer: Boolean(opts.openDrawer) && shouldOpenDrawer(t, s),
     }),
   );
   const data = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
@@ -228,9 +252,7 @@ export async function printTickets(tickets: TicketData[], s: PrinterSettings = l
     data.set(p, off);
     off += p.length;
   }
-  if (s.method === "bluetooth") await sendBluetooth(data);
-  else if (s.method === "usb") await sendUsb(data);
-  else sendRawBT(data);
+  await send(data, s);
 }
 
 export async function printOrders(ids: number[], s: PrinterSettings = loadPrinter()) {
@@ -267,5 +289,7 @@ export const SAMPLE_TICKET: TicketData = {
 
 export async function printSample(s: PrinterSettings, businessName: string) {
   if (s.method === "browser") return printWithBrowser("sample=1", s.width);
-  await printTickets([{ ...SAMPLE_TICKET, business: { ...SAMPLE_TICKET.business, name: businessName } }], s);
+  await printTickets([{ ...SAMPLE_TICKET, business: { ...SAMPLE_TICKET.business, name: businessName } }], s, {
+    openDrawer: true,
+  });
 }

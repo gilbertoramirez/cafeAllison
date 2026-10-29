@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { posSale } from "@/app/admin/actions";
 import { money } from "@/lib/format";
-import SaleClosedDialog from "./SaleClosedDialog";
+import SaleClosedDialog, { type SaleResult } from "./SaleClosedDialog";
+import { loadPrinter, openDrawer, printTickets, shouldOpenDrawer } from "@/lib/printer";
 
 type P = { id: number; name: string; category: string; price: number; maxQty: number; icon: string };
 type Method = "efectivo" | "tarjeta" | "transferencia";
@@ -16,7 +17,23 @@ export default function PosTerminal({ products }: { products: P[] }) {
   const [cash, setCash] = useState("");
   const [customer, setCustomer] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [closed, setClosed] = useState<{ orderId: number; change: number } | null>(null); // venta recién cerrada
+  const [closed, setClosed] = useState<SaleResult | null>(null); // venta recién cerrada
+  const [drawerEnabled, setDrawerEnabled] = useState(false);
+
+  // ¿Este dispositivo tiene cajón configurado? (se lee después de hidratar)
+  useEffect(() => {
+    const s = loadPrinter();
+    setDrawerEnabled(s.drawer && s.method !== "browser"); // eslint-disable-line react-hooks/set-state-in-effect
+  }, []);
+
+  async function manualDrawer() {
+    try {
+      await openDrawer();
+      setMsg({ ok: true, text: "🗄️ Cajón abierto" });
+    } catch (e) {
+      setMsg({ ok: false, text: `No se abrió el cajón: ${e instanceof Error ? e.message : e}` });
+    }
+  }
   const [pending, start] = useTransition();
   const [sheet, setSheet] = useState(false); // ticket abierto en celular
 
@@ -54,7 +71,25 @@ export default function PosTerminal({ products }: { products: P[] }) {
       });
       if (res.ok) {
         setMsg(null);
-        setClosed({ orderId: res.orderId, change: res.change });
+        // Imprimir y/o abrir el cajón de inmediato, todavía dentro del toque en "Cobrar"
+        // (Android/RawBT bloquea aperturas que no vienen de un toque reciente)
+        const s = loadPrinter();
+        const result: SaleResult = { orderId: res.orderId, change: res.change, ticket: res.ticket };
+        if (res.ticket) {
+          try {
+            if (s.autoPrintSale) {
+              await printTickets([res.ticket], s, { openDrawer: true });
+              result.printed = true;
+              result.drawerOpened = shouldOpenDrawer(res.ticket, s);
+            } else if (shouldOpenDrawer(res.ticket, s)) {
+              await openDrawer(s);
+              result.drawerOpened = true;
+            }
+          } catch (e) {
+            result.error = e instanceof Error ? e.message : String(e);
+          }
+        }
+        setClosed(result);
         setTicket({});
         setCash("");
         setCustomer("");
@@ -147,11 +182,20 @@ export default function PosTerminal({ products }: { products: P[] }) {
         >
           {pending ? "Registrando…" : `Cobrar ${money(total)}`}
         </button>
-        {lines.length > 0 && (
-          <button className="w-full text-xs text-cafe-600 underline" onClick={() => setTicket({})}>
-            Vaciar ticket
-          </button>
-        )}
+        <div className="flex items-center justify-between gap-2">
+          {lines.length > 0 ? (
+            <button className="text-xs text-cafe-600 underline" onClick={() => setTicket({})}>
+              Vaciar ticket
+            </button>
+          ) : (
+            <span />
+          )}
+          {drawerEnabled && (
+            <button className="btn-secondary px-3 py-1 text-xs" onClick={manualDrawer}>
+              🗄️ Abrir cajón
+            </button>
+          )}
+        </div>
     </>
   );
 
@@ -223,7 +267,7 @@ export default function PosTerminal({ products }: { products: P[] }) {
           <span className="text-lg font-semibold tabular-nums">Cobrar {money(total)}</span>
         </button>
       )}
-      {closed && <SaleClosedDialog orderId={closed.orderId} change={closed.change} onClose={() => setClosed(null)} />}
+      {closed && <SaleClosedDialog sale={closed} onClose={() => setClosed(null)} />}
       {sheet && (
         <div className="fixed inset-0 z-[60] bg-black/40 lg:hidden" onClick={() => setSheet(false)}>
           <div

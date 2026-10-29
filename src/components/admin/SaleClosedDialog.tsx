@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import TicketPreview from "@/components/TicketPreview";
 import { money } from "@/lib/format";
 import {
@@ -10,7 +10,9 @@ import {
   connectUsb,
   fetchTickets,
   loadPrinter,
+  openDrawer,
   printTickets,
+  shouldOpenDrawer,
   type PrinterSettings,
 } from "@/lib/printer";
 import type { TicketData } from "@/lib/ticket";
@@ -24,56 +26,67 @@ const METHOD_LABEL: Record<PrinterSettings["method"], string> = {
 
 type PrintState = { kind: "idle" } | { kind: "busy" } | { kind: "ok" } | { kind: "error"; text: string };
 
-/** Se abre al cerrar una venta: muestra el ticket y permite imprimirlo. */
-export default function SaleClosedDialog({
-  orderId,
-  change,
-  onClose,
-}: {
+/** Resultado de cobrar en la caja (la caja ya intentó imprimir/abrir el cajón al cobrar). */
+export type SaleResult = {
   orderId: number;
   change: number;
-  onClose: () => void;
-}) {
+  ticket: TicketData | null;
+  printed?: boolean;
+  drawerOpened?: boolean;
+  error?: string;
+};
+
+/** Se abre al cerrar una venta: muestra el ticket y permite imprimirlo. */
+export default function SaleClosedDialog({ sale, onClose }: { sale: SaleResult; onClose: () => void }) {
+  const { orderId, change } = sale;
   const [settings] = useState<PrinterSettings>(() => loadPrinter());
-  const [ticket, setTicket] = useState<TicketData | null>(null);
+  const [ticket, setTicket] = useState<TicketData | null>(sale.ticket);
   const [loadError, setLoadError] = useState("");
-  const [print, setPrint] = useState<PrintState>({ kind: "idle" });
+  const [print, setPrint] = useState<PrintState>(
+    sale.error ? { kind: "error", text: sale.error } : sale.printed ? { kind: "ok" } : { kind: "idle" },
+  );
+  const [drawerOpened, setDrawerOpened] = useState(Boolean(sale.drawerOpened));
   const [device, setDevice] = useState<string | null>(() => connectedName());
-  const autoTried = useRef(false);
   const needsConnection = (settings.method === "bluetooth" || settings.method === "usb") && !device;
+  const drawerAvailable = Boolean(ticket && shouldOpenDrawer(ticket, settings));
 
   const doPrint = useCallback(
     async (data: TicketData) => {
       setPrint({ kind: "busy" });
       try {
-        await printTickets([data], settings);
+        // Si el cajón no se abrió al cobrar (p. ej. faltaba conectar), se abre con esta impresión
+        const withDrawer = !drawerOpened && shouldOpenDrawer(data, settings);
+        await printTickets([data], settings, { openDrawer: withDrawer });
+        if (withDrawer) setDrawerOpened(true);
         setDevice(connectedName());
         setPrint({ kind: "ok" });
       } catch (e) {
         setPrint({ kind: "error", text: e instanceof Error ? e.message : String(e) });
       }
     },
-    [settings],
+    [settings, drawerOpened],
   );
 
+  // Respaldo: si la caja no trajo el ticket, se consulta
   useEffect(() => {
+    if (sale.ticket) return;
     let alive = true;
     fetchTickets(`ids=${orderId}`)
-      .then(([t]) => {
-        if (!alive) return;
-        if (!t) return setLoadError("No se encontró la venta.");
-        setTicket(t);
-        // Impresión automática al cobrar (si está activada en este dispositivo)
-        if (settings.autoPrintSale && !autoTried.current) {
-          autoTried.current = true;
-          doPrint(t);
-        }
-      })
+      .then(([t]) => alive && (t ? setTicket(t) : setLoadError("No se encontró la venta.")))
       .catch((e) => alive && setLoadError(e instanceof Error ? e.message : "Error al cargar el ticket"));
     return () => {
       alive = false;
     };
-  }, [orderId, settings.autoPrintSale, doPrint]);
+  }, [orderId, sale.ticket]);
+
+  async function drawer() {
+    try {
+      await openDrawer(settings);
+      setDrawerOpened(true);
+    } catch (e) {
+      setPrint({ kind: "error", text: e instanceof Error ? e.message : String(e) });
+    }
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -134,6 +147,16 @@ export default function SaleClosedDialog({
           </p>
 
           {print.kind === "ok" && <p className="rounded-lg bg-green-50 p-2 text-sm text-green-800">🖨️ Ticket enviado a la impresora.</p>}
+          {drawerAvailable && (
+            <div className="flex items-center justify-between gap-2 text-sm">
+              <span className={drawerOpened ? "text-green-700" : "text-cafe-600"}>
+                {drawerOpened ? "🗄️ Cajón abierto" : "🗄️ El cajón no se abrió"}
+              </span>
+              <button type="button" className="btn-secondary px-3 py-1 text-xs" onClick={drawer}>
+                Abrir cajón
+              </button>
+            </div>
+          )}
           {print.kind === "error" && <p className="rounded-lg bg-red-50 p-2 text-sm text-red-700">No se imprimió: {print.text}</p>}
 
           <div className="flex gap-2">
