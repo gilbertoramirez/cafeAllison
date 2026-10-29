@@ -18,17 +18,20 @@ export type PrinterSettings = {
   cut: boolean;
   drawer: boolean;
   copies: number;
+  /** false = imprime sin acentos (para impresoras que no los muestran bien) */
+  accents: boolean;
 };
 
 const KEY = "cafe_printer_v1";
 export const DEFAULT_PRINTER: PrinterSettings = {
   method: "browser",
-  width: 80,
+  width: 58,
   autoPrintSale: false,
   autoPrintOnline: false,
   cut: true,
   drawer: false,
   copies: 1,
+  accents: true,
 };
 
 export function loadPrinter(): PrinterSettings {
@@ -214,6 +217,7 @@ export async function printTickets(tickets: TicketData[], s: PrinterSettings = l
     escpos(ticketLines(t, cols), {
       cut: s.cut,
       copies: s.copies,
+      accents: s.accents,
       // el cajón solo se abre en ventas de mostrador en efectivo
       drawer: s.drawer && t.order.channel === "mostrador" && t.order.payment_method === "efectivo",
     }),

@@ -18,7 +18,7 @@ const METHODS: { id: PrintMethod; label: string; help: string }[] = [
   {
     id: "bluetooth",
     label: "Bluetooth directo",
-    help: "Chrome en Android se conecta a la impresora térmica Bluetooth. Imprime sin preguntar y corta el papel. Enciende la impresora y toca “Conectar”.",
+    help: "Chrome en Android se conecta directo a la impresora (por ejemplo “58Printer”). No hace falta emparejarla en los ajustes de Android. Enciéndela, toca “Conectar” y elígela de la lista.",
   },
   {
     id: "usb",
@@ -28,7 +28,7 @@ const METHODS: { id: PrintMethod; label: string; help: string }[] = [
   {
     id: "rawbt",
     label: "App RawBT (Android)",
-    help: "Instala la app gratuita “RawBT” de Google Play, configura ahí tu impresora (Bluetooth, USB o red) y listo. Funciona con casi cualquier impresora de tickets.",
+    help: "Instala la app gratuita “RawBT” de Google Play. Empareja la impresora en Ajustes de Android → Bluetooth (PIN 0000 en la mayoría) y selecciónala dentro de RawBT. Funciona con casi cualquier impresora de tickets.",
   },
   {
     id: "browser",
@@ -168,6 +168,9 @@ export default function PrinterSettingsCard({ businessName }: { businessName: st
             </Toggle>
             <Toggle checked={s.drawer} onChange={(v) => update({ drawer: v })}>
               Abrir el cajón de dinero en ventas en efectivo
+            </Toggle>
+            <Toggle checked={!s.accents} onChange={(v) => update({ accents: !v })}>
+              Imprimir sin acentos (actívalo si salen símbolos raros en vez de á, é, ñ)
             </Toggle>
           </>
         )}

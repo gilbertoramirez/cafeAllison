@@ -134,34 +134,41 @@ const PC850: Record<string, number> = {
   Á: 0xb5, É: 0x90, Í: 0xd6, Ó: 0xe0, Ú: 0xe9, "¿": 0xa8, "¡": 0xad, "°": 0xf8,
 };
 
-function encodeText(s: string): number[] {
+function encodeText(s: string, accents: boolean): number[] {
   const out: number[] = [];
   for (const ch of s) {
     const code = ch.charCodeAt(0);
     if (code >= 32 && code < 127) out.push(code);
-    else if (PC850[ch] !== undefined) out.push(PC850[ch]);
+    else if (accents && PC850[ch] !== undefined) out.push(PC850[ch]);
     else {
       const plain = ch.normalize("NFD").replace(/[̀-ͯ]/g, "");
       if (plain.length === 1 && plain.charCodeAt(0) < 127) out.push(plain.charCodeAt(0));
-      else if (ch === "·") out.push(0xfa);
+      else if (ch === "·") out.push(accents ? 0xfa : 0x2d);
+      else if (ch === "¿" || ch === "¡") continue;
       // emojis y otros símbolos se omiten
     }
   }
   return out;
 }
 
-export function escpos(lines: TicketLine[], opts: { cut?: boolean; drawer?: boolean; copies?: number } = {}): Uint8Array {
+export function escpos(
+  lines: TicketLine[],
+  opts: { cut?: boolean; drawer?: boolean; copies?: number; accents?: boolean } = {},
+): Uint8Array {
   const ESC = 0x1b;
   const GS = 0x1d;
+  const FS = 0x1c;
+  const accents = opts.accents !== false;
   const bytes: number[] = [];
   for (let c = 0; c < Math.max(1, opts.copies ?? 1); c++) {
     bytes.push(ESC, 0x40); // inicializar
+    bytes.push(FS, 0x2e); // salir del modo de caracteres chinos (impresoras genéricas lo traen activado)
     bytes.push(ESC, 0x74, 2); // página de códigos PC850
     for (const l of lines) {
       bytes.push(ESC, 0x61, l.align === "center" ? 1 : l.align === "right" ? 2 : 0);
       bytes.push(ESC, 0x45, l.bold ? 1 : 0);
       bytes.push(GS, 0x21, l.big ? 0x11 : 0x00);
-      bytes.push(...encodeText(l.text), 0x0a);
+      bytes.push(...encodeText(l.text, accents), 0x0a);
     }
     bytes.push(ESC, 0x61, 0, GS, 0x21, 0, ESC, 0x45, 0);
     bytes.push(0x0a, 0x0a, 0x0a);
