@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import LiveUpdates from "@/components/LiveUpdates";
 import PendingPayment, { ClearCartWhenPaid } from "@/components/PendingPayment";
+import { RememberOrder } from "@/components/MyOrders";
 import { dateTime, money } from "@/lib/format";
 import { getOrderByToken, getOrderItems, orderCode } from "@/lib/orders";
 import { refreshStripeOrder } from "@/lib/payments";
@@ -37,7 +38,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/pe
     <main className="mx-auto w-full max-w-xl flex-1 space-y-4 px-4 py-8">
       <div className="flex items-center justify-between">
         <Link href="/" className="text-sm text-cafe-700 underline">
-          ← {settings.business_name}
+          ← {settings.business_name} · Mis pedidos
         </Link>
         {!finished && <LiveUpdates url={`/api/live/pedido/${order.token}`} mode="order" />}
       </div>
@@ -49,6 +50,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/pe
       {sp.pago === "ok" && order.payment_status === "pagado" && (
         <p className="rounded-lg bg-green-50 p-3 text-green-800">¡Pago recibido! Ya estamos preparando tu pedido.</p>
       )}
+      {order.channel !== "mostrador" && <RememberOrder token={order.token} />}
       {awaitingPayment && <PendingPayment token={order.token} total={order.total} confirming={sp.pago === "ok"} />}
       {order.payment_method === "stripe" && order.payment_status === "pagado" && <ClearCartWhenPaid token={order.token} />}
 

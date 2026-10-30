@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { money } from "@/lib/format";
 import { normalizeCp, quoteDelivery, type DeliveryRules } from "@/lib/delivery";
 import { cardPricing, type OnlineFeeRules } from "@/lib/fees";
+import { rememberOrder } from "@/lib/myOrders";
 
 export type ShopProduct = {
   id: number;
@@ -250,6 +251,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo enviar el pedido");
+      rememberOrder(data.token); // para verlo en "Mis pedidos"
       if (data.checkoutUrl) {
         // El carrito se conserva hasta confirmar el pago (por si el cliente se regresa)
         try {

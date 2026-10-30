@@ -6,6 +6,7 @@ import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { availableToday } from "@/lib/format";
 import { daysLabel, type Product } from "@/lib/types";
 import Shop from "@/components/Shop";
+import MyOrders from "@/components/MyOrders";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,7 @@ export default async function Home() {
           )}
         </div>
       </header>
+      <MyOrders />
       <Shop
         products={products.map((p) => ({
           id: p.id,
