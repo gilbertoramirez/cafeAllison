@@ -1,3 +1,4 @@
+import { onlinePrice } from "@/lib/fees";
 import { money } from "@/lib/format";
 import Link from "next/link";
 import { all } from "@/lib/db";
@@ -45,7 +46,8 @@ export default async function Home() {
           notToday: availableToday(p.available_days) ? null : `Solo ${daysLabel(p.available_days)}`,
           description: p.description,
           category: p.category,
-          price: p.price,
+          price: onlinePrice(p.price, settings.online_fee),
+          basePrice: p.price,
           image_url: p.image_url,
           soldOut: Boolean(p.track_stock) && p.stock <= 0,
           maxQty: p.track_stock ? Math.max(p.stock, 0) : 99,

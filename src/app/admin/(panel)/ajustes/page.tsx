@@ -2,7 +2,7 @@ import { Field, PageTitle } from "@/components/admin/ui";
 import { centsToInput, money } from "@/lib/format";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { parseCps } from "@/lib/delivery";
-import { onlineFee } from "@/lib/fees";
+import { onlinePrice } from "@/lib/fees";
 import { deleteZone, saveOnlineFee, saveSettings, saveZone } from "../../actions";
 import PrinterSettingsCard from "@/components/admin/PrinterSettingsCard";
 
@@ -135,10 +135,11 @@ export default async function SettingsPage() {
           <label className="flex items-start gap-2">
             <input type="checkbox" name="enabled" className="mt-1" defaultChecked={s.online_fee.enabled} />
             <span>
-              <strong>Cobrar al cliente la comisión del pago en línea</strong>
+              <strong>Incluir la comisión del pago en línea en los precios de la tienda</strong>
               <span className="block text-cafe-600">
-                Se suma como “Comisión por pago en línea” para que te llegue completo el importe del pedido. Solo aplica al
-                pagar con tarjeta en línea; efectivo y WhatsApp no la llevan.
+                Los precios de la tienda en línea se muestran con la comisión incluida (redondeados al peso). Si al pagar con
+                tarjeta el redondeo no cubre el cargo fijo de Stripe, se suma la diferencia. La caja (venta en mostrador) usa
+                siempre tus precios normales.
               </span>
             </span>
           </label>
@@ -156,7 +157,7 @@ export default async function SettingsPage() {
           <p className="text-xs text-cafe-600">
             Ejemplo con estas tarifas:{" "}
             {[10000, 20000, 50000]
-              .map((a) => `pedido ${money(a)} → cliente paga ${money(a + onlineFee(a, { ...s.online_fee, enabled: true }))}`)
+              .map((a) => `${money(a)} → en línea ${money(onlinePrice(a, { ...s.online_fee, enabled: true }))}`)
               .join(" · ")}
             . Revisa la tarifa vigente en tu cuenta de Stripe.
           </p>

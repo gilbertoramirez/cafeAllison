@@ -25,7 +25,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
           label="Ventas"
           value={money(fin.sales)}
           hint={`${fin.orders} ventas · ticket promedio ${money(avgTicket)}${fin.delivery ? ` · incluye ${money(fin.delivery)} de envíos` : ""}${
-            fin.onlineFees ? ` · sin contar ${money(fin.onlineFees)} de comisiones de pago en línea (son de Stripe)` : ""
+            fin.onlineFees ? ` · sin contar ${money(fin.onlineFees)} de comisiones que se queda Stripe` : ""
           }`}
         />
         <Stat

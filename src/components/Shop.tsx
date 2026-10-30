@@ -15,7 +15,10 @@ export type ShopProduct = {
   notToday: string | null;
   description: string;
   category: string;
+  /** precio en línea (con comisión incluida) */
   price: number;
+  /** precio normal de mostrador */
+  basePrice: number;
   image_url: string;
   soldOut: boolean;
   maxQty: number;
@@ -143,7 +146,11 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
       : 0;
   const deliveryBlocked = deliveryType === "domicilio" && !quote.ok;
   // Comisión por pago en línea (si el negocio la traslada al cliente)
-  const cardFee = settings.stripe ? onlineFee(subtotal + fee, settings.onlineFee) : 0;
+  // Los precios en línea ya incluyen el porcentaje; con tarjeta solo se suma lo que falte del cargo fijo
+  const baseAmount = lines.reduce((a, l) => a + l.p.basePrice * l.qty, 0) + fee;
+  const cardFee = settings.stripe
+    ? Math.max(0, baseAmount + onlineFee(baseAmount, settings.onlineFee) - (subtotal + fee))
+    : 0;
   const serviceFee = payment === "stripe" ? cardFee : 0;
   const total = subtotal + fee + serviceFee;
   const belowMin = deliveryType === "domicilio" && subtotal < settings.minDeliveryOrder;

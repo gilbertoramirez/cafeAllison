@@ -33,10 +33,10 @@ function utcBounds(r: Range): [string, string] {
 
 export async function salesSummary(r: Range) {
   const [a, b] = utcBounds(r);
-  // La comisión por pago en línea se traslada a Stripe: no cuenta como venta del negocio
+  // La comisión que se queda Stripe no cuenta como venta del negocio
   const row = await get<{ orders: number; sales: number; delivery: number; fees: number }>(
-    `SELECT COUNT(*) AS orders, COALESCE(SUM(total - service_fee),0) AS sales, COALESCE(SUM(delivery_fee),0) AS delivery,
-            COALESCE(SUM(service_fee),0) AS fees
+    `SELECT COUNT(*) AS orders, COALESCE(SUM(total - processing_fee),0) AS sales, COALESCE(SUM(delivery_fee),0) AS delivery,
+            COALESCE(SUM(processing_fee),0) AS fees
      FROM orders WHERE payment_status = 'pagado' AND status != 'cancelado' AND created_at >= ? AND created_at < ?`,
     [a, b],
   );
@@ -57,9 +57,9 @@ export async function salesSummary(r: Range) {
 export async function salesByChannel(r: Range) {
   const [a, b] = utcBounds(r);
   return all<{ channel: string; payment_method: string; orders: number; total: number }>(
-    `SELECT channel, payment_method, COUNT(*) AS orders, SUM(total - service_fee) AS total FROM orders
+    `SELECT channel, payment_method, COUNT(*) AS orders, SUM(total - processing_fee) AS total FROM orders
      WHERE payment_status = 'pagado' AND status != 'cancelado' AND created_at >= ? AND created_at < ?
-     GROUP BY channel, payment_method ORDER BY SUM(total - service_fee) DESC`,
+     GROUP BY channel, payment_method ORDER BY SUM(total - processing_fee) DESC`,
     [a, b],
   );
 }
@@ -79,7 +79,7 @@ export async function topProducts(r: Range, limit = 10) {
 export async function dailySales(r: Range) {
   const [a, b] = utcBounds(r);
   const rows = await all<{ created_at: string; total: number }>(
-    `SELECT created_at, total - service_fee AS total FROM orders
+    `SELECT created_at, total - processing_fee AS total FROM orders
      WHERE payment_status = 'pagado' AND status != 'cancelado' AND created_at >= ? AND created_at < ?`,
     [a, b],
   );

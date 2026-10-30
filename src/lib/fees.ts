@@ -22,3 +22,20 @@ export function onlineFee(amount: number, r: OnlineFeeRules): number {
   const charge = Math.ceil((amount + Math.max(0, r.fixed) * tax) / (1 - pct));
   return charge - amount;
 }
+
+/**
+ * Precio para la tienda en línea con el porcentaje de la comisión ya incluido,
+ * redondeado hacia arriba al peso. El cargo fijo por cobro se cubre a nivel pedido.
+ */
+export function onlinePrice(price: number, r: OnlineFeeRules): number {
+  if (!r.enabled || price <= 0) return price;
+  const pct = (Math.max(0, r.percent) / 100) * (1 + Math.max(0, r.iva) / 100);
+  if (pct >= 1) return price;
+  return Math.ceil(price / (1 - pct) / 100) * 100;
+}
+
+/** Comisión estimada que Stripe descuenta de un cobro (centavos). */
+export function processorFee(charge: number, r: OnlineFeeRules): number {
+  if (charge <= 0) return 0;
+  return Math.round(((charge * Math.max(0, r.percent)) / 100 + Math.max(0, r.fixed)) * (1 + Math.max(0, r.iva) / 100));
+}

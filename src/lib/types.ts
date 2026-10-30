@@ -55,6 +55,8 @@ export type Order = {
   cancelled_at: string | null;
   /** comisión por pago en línea cobrada al cliente (centavos) */
   service_fee: number;
+  /** comisión estimada que se queda el procesador de pagos (no es venta) */
+  processing_fee: number;
 };
 
 export type OrderItem = {

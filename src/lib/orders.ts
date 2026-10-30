@@ -24,8 +24,15 @@ export type NewOrderInput = {
   /** Calcula el envío según el subtotal (para envío gratis). */
   deliveryFee?: number | ((subtotal: number) => number);
   postalCode?: string;
-  /** Comisión por pago en línea, calculada sobre subtotal + envío. */
-  serviceFee?: (amount: number) => number;
+  /** Precio unitario a cobrar (p. ej. precio en línea con comisión). Por defecto, el precio del producto. */
+  priceFor?: (p: Product) => number;
+  /**
+   * Cargo extra por pago en línea. Recibe el importe a precios normales (más envío) y el importe
+   * ya calculado a precios de este pedido; devuelve lo que falte para cubrir la comisión.
+   */
+  serviceFee?: (baseAmount: number, chargedAmount: number) => number;
+  /** Comisión estimada del procesador para el total final (se guarda para finanzas). */
+  processingFee?: (total: number) => number;
   minSubtotal?: number;
   /** Pedidos en línea: respeta los días de venta de cada producto. */
   enforceDays?: boolean;
@@ -74,11 +81,14 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
       }
     }
     let subtotal = 0;
-    const lines: { p: Product; qty: number; note: string }[] = [];
+    let baseSubtotal = 0;
+    const lines: { p: Product; qty: number; note: string; price: number }[] = [];
     for (const { productId, qty, note } of merged.values()) {
       const p = products.get(productId)!;
-      subtotal += p.price * qty;
-      lines.push({ p, qty, note });
+      const price = input.priceFor ? input.priceFor(p) : p.price;
+      subtotal += price * qty;
+      baseSubtotal += p.price * qty;
+      lines.push({ p, qty, note, price });
     }
 
     if (input.minSubtotal && subtotal < input.minSubtotal) {
@@ -86,8 +96,9 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
     }
     const fee = typeof input.deliveryFee === "function" ? input.deliveryFee(subtotal) : (input.deliveryFee ?? 0);
     const deliveryFee = input.deliveryType === "domicilio" ? fee : 0;
-    const serviceFee = input.serviceFee ? input.serviceFee(subtotal + deliveryFee) : 0;
+    const serviceFee = input.serviceFee ? input.serviceFee(baseSubtotal + deliveryFee, subtotal + deliveryFee) : 0;
     const total = subtotal + deliveryFee + serviceFee;
+    const processingFee = input.processingFee ? input.processingFee(total) : 0;
     if (input.cashMustCover && input.cashGiven != null && input.cashGiven < total) {
       throw new OrderError("El efectivo recibido es menor al total.");
     }
@@ -97,8 +108,8 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
     const [{ id: newId }] = await q<{ id: number }>(
       `INSERT INTO orders (token, channel, status, customer_name, phone, delivery_type, address, address_ref,
          lat, lng, notes, payment_method, payment_status, cash_given, subtotal, delivery_fee, total, created_at, paid_at, postal_code,
-         service_fee, change_seq)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, nextval('orders_change_seq')) RETURNING id`,
+         service_fee, processing_fee, change_seq)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, nextval('orders_change_seq')) RETURNING id`,
       [
         token,
         input.channel,
@@ -121,13 +132,14 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
         input.paid ? now : null,
         (input.postalCode ?? "").slice(0, 10),
         serviceFee,
+        processingFee,
       ],
     );
 
-    for (const { p, qty, note } of lines) {
+    for (const { p, qty, note, price } of lines) {
       await q(
         "INSERT INTO order_items (order_id, product_id, name, unit_price, unit_cost, qty, notes) VALUES (?,?,?,?,?,?,?)",
-        [newId, p.id, productLabel(p), p.price, p.cost, qty, note],
+        [newId, p.id, productLabel(p), price, p.cost, qty, note],
       );
       if (p.track_stock) {
         await q("UPDATE products SET stock = stock - ? WHERE id = ?", [qty, p.id]);

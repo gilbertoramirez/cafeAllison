@@ -147,6 +147,7 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS postal_code TEXT NOT NULL DEFAULT ''
 CREATE SEQUENCE IF NOT EXISTS orders_change_seq;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT NOT NULL DEFAULT '';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS service_fee INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS processing_fee INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS change_seq BIGINT NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_orders_change ON orders(change_seq);
@@ -354,6 +355,15 @@ async function init(b: Backend) {
       );
     }
     await q("UPDATE products SET description = ? WHERE description = ?", [FLAVOR, OLD_FLAVOR]);
+    // Una sola vez: activar precios en línea con comisión y migrar el dato de finanzas
+    const [feeMig] = await q<{ value: string }>("SELECT value FROM settings WHERE key = 'online_fee_v2'");
+    if (!feeMig) {
+      await q(
+        "INSERT INTO settings (key, value) VALUES ('online_fee_enabled', '1') ON CONFLICT (key) DO UPDATE SET value = '1'",
+      );
+      await q("UPDATE orders SET processing_fee = service_fee WHERE processing_fee = 0 AND service_fee > 0");
+      await q("INSERT INTO settings (key, value) VALUES ('online_fee_v2', '1') ON CONFLICT (key) DO NOTHING");
+    }
     for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) {
       await q("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING", [k, v]);
     }
