@@ -7,6 +7,8 @@ import { dateTime, money } from "@/lib/format";
 import { loadMyOrders, MY_ORDERS_EVENT, rememberOrder } from "@/lib/myOrders";
 import { CUSTOMER_STATUS, customerSteps } from "@/lib/orderStatus";
 import type { OrderStatus } from "@/lib/types";
+import { normalizePhone, type LoyaltySettings, type LoyaltyStatus } from "@/lib/loyaltyRules";
+import LoyaltyCard, { LoyaltyRulesText } from "./LoyaltyCard";
 
 type MyOrder = {
   id: number;
@@ -24,13 +26,36 @@ const code = (id: number) => `#${String(id).padStart(4, "0")}`;
 const isActive = (o: MyOrder) => o.status !== "entregado" && o.status !== "cancelado";
 
 /** "Mis pedidos": aviso del pedido en curso + panel con el progreso de los pedidos de este dispositivo. */
-export default function MyOrders() {
+export default function MyOrders({ loyaltyRules }: { loyaltyRules: LoyaltySettings }) {
   const router = useRouter();
   const [orders, setOrders] = useState<MyOrder[]>([]);
   const [open, setOpen] = useState(false);
   const [lookup, setLookup] = useState({ code: "", phone: "" });
   const [lookupMsg, setLookupMsg] = useState("");
   const [searching, setSearching] = useState(false);
+  const [cardPhone, setCardPhone] = useState("");
+  const [card, setCard] = useState<LoyaltyStatus | null>(null);
+
+  // Tarjeta de sellos: usa el teléfono guardado en este celular
+  useEffect(() => {
+    if (!open || cardPhone) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem("cafe_customer_v1") || "{}").phone;
+      if (saved) setCardPhone(saved); // eslint-disable-line react-hooks/set-state-in-effect
+    } catch {}
+  }, [open, cardPhone]);
+  const cardKey = normalizePhone(cardPhone);
+  useEffect(() => {
+    if (!loyaltyRules.enabled || !cardKey) return setCard(null); // eslint-disable-line react-hooks/set-state-in-effect
+    let alive = true;
+    fetch(`/api/lealtad?phone=${cardKey}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => alive && setCard(d.status))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [cardKey, loyaltyRules.enabled, orders]);
 
   const refresh = useCallback(async () => {
     const refs = loadMyOrders();
@@ -146,6 +171,24 @@ export default function MyOrders() {
               </button>
             </div>
             <div className="space-y-3 overflow-y-auto p-4">
+              {loyaltyRules.enabled && (
+                <div className="space-y-2 rounded-xl bg-white p-4">
+                  {card ? (
+                    <LoyaltyCard status={card} />
+                  ) : (
+                    <p className="text-sm font-semibold">☕ Tarjeta de sellos</p>
+                  )}
+                  <input
+                    className="input"
+                    type="tel"
+                    inputMode="tel"
+                    placeholder="Tu teléfono para ver tus sellos"
+                    value={cardPhone}
+                    onChange={(e) => setCardPhone(e.target.value)}
+                  />
+                  <LoyaltyRulesText rules={loyaltyRules} />
+                </div>
+              )}
               {orders.length === 0 && (
                 <p className="rounded-xl bg-white p-4 text-sm text-cafe-600">
                   Aquí verás tus pedidos y cómo van. Todavía no hay pedidos en este celular.

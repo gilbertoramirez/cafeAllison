@@ -1,5 +1,6 @@
 import type { DeliveryRules, DeliveryZone } from "./delivery";
 import type { OnlineFeeRules } from "./fees";
+import type { LoyaltySettings } from "./loyaltyRules";
 import { all, run } from "./db";
 
 export type Settings = {
@@ -15,6 +16,7 @@ export type Settings = {
   hours: string;
   /** Comisión por pago en línea trasladada al cliente */
   online_fee: OnlineFeeRules;
+  loyalty: LoyaltySettings;
 };
 
 export async function getSettings(): Promise<Settings> {
@@ -35,6 +37,13 @@ export async function getSettings(): Promise<Settings> {
       percent: Number(m.online_fee_percent ?? 3.6),
       fixed: Number(m.online_fee_fixed ?? 300),
       iva: Number(m.online_fee_iva ?? 16),
+    },
+    loyalty: {
+      enabled: m.loyalty_enabled !== "0",
+      needed: Math.max(1, Number(m.loyalty_stamps_needed ?? 10)),
+      minPurchase: Number(m.loyalty_min_purchase ?? 5000),
+      stampMonths: Math.max(1, Number(m.loyalty_stamp_months ?? 6)),
+      rewardDays: Math.max(1, Number(m.loyalty_reward_days ?? 30)),
     },
   };
 }

@@ -4,9 +4,12 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { posSale } from "@/app/admin/actions";
 import { money } from "@/lib/format";
 import SaleClosedDialog, { type SaleResult } from "./SaleClosedDialog";
+import LoyaltyCard from "@/components/LoyaltyCard";
+import { getLoyalty } from "@/app/admin/actions";
+import { normalizePhone, pickFreeLine, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import { loadPrinter, openDrawer, printTickets, shouldOpenDrawer } from "@/lib/printer";
 
-type P = { id: number; name: string; category: string; price: number; maxQty: number; icon: string };
+type P = { id: number; name: string; category: string; size: string; price: number; maxQty: number; icon: string };
 type Method = "efectivo" | "tarjeta" | "transferencia";
 
 export default function PosTerminal({ products }: { products: P[] }) {
@@ -18,6 +21,22 @@ export default function PosTerminal({ products }: { products: P[] }) {
   const [customer, setCustomer] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [closed, setClosed] = useState<SaleResult | null>(null); // venta recién cerrada
+  // Lealtad: teléfono del cliente, sus sellos y canje de bebida gratis
+  const [phone, setPhone] = useState("");
+  const [loyalty, setLoyalty] = useState<LoyaltyStatus | null>(null);
+  const [useReward, setUseReward] = useState(false);
+  const loyaltyPhone = normalizePhone(phone);
+  useEffect(() => {
+    setUseReward(false); // eslint-disable-line react-hooks/set-state-in-effect
+    if (!loyaltyPhone) return setLoyalty(null);
+    let alive = true;
+    getLoyalty(loyaltyPhone)
+      .then((st) => alive && setLoyalty(st))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [loyaltyPhone]);
   const [drawerEnabled, setDrawerEnabled] = useState(false);
 
   // ¿Este dispositivo tiene cajón configurado? (se lee después de hidratar)
@@ -46,7 +65,10 @@ export default function PosTerminal({ products }: { products: P[] }) {
   const lines = Object.entries(ticket)
     .map(([id, qty]) => ({ p: products.find((x) => x.id === Number(id))!, qty }))
     .filter((l) => l.p && l.qty > 0);
-  const total = lines.reduce((a, l) => a + l.p.price * l.qty, 0);
+  // Bebida gratis (lealtad): misma regla que el servidor
+  const freeIdx = useReward ? pickFreeLine(lines.map((l) => ({ category: l.p.category, size: l.p.size, price: l.p.price }))) : -1;
+  const freeValue = freeIdx >= 0 ? lines[freeIdx].p.price : 0;
+  const total = lines.reduce((a, l) => a + l.p.price * l.qty, 0) - freeValue;
   const cashCents = Math.round(Number(cash || 0) * 100);
   const change = method === "efectivo" && cash ? cashCents - total : 0;
 
@@ -68,6 +90,8 @@ export default function PosTerminal({ products }: { products: P[] }) {
         paymentMethod: method,
         cashGiven: method === "efectivo" && cash ? cashCents : null,
         customerName: customer,
+        phone: loyaltyPhone,
+        useReward: useReward && freeIdx >= 0,
       });
       if (res.ok) {
         setMsg(null);
@@ -93,6 +117,8 @@ export default function PosTerminal({ products }: { products: P[] }) {
         setTicket({});
         setCash("");
         setCustomer("");
+        setPhone("");
+        setUseReward(false);
         setSheet(false);
       } else {
         setMsg({ ok: false, text: res.error });
@@ -130,6 +156,32 @@ export default function PosTerminal({ products }: { products: P[] }) {
         </div>
 
         <input className="input" placeholder="Cliente (opcional)" value={customer} onChange={(e) => setCustomer(e.target.value)} />
+        <input
+          className="input"
+          type="tel"
+          inputMode="tel"
+          placeholder="Teléfono para sellos (opcional)"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+        />
+        {loyalty && (
+          <div className="space-y-2">
+            <LoyaltyCard status={loyalty} compact />
+            {loyalty.rewards.length > 0 && (
+              <label className="flex items-center gap-2 rounded-lg bg-green-50 p-2 text-sm text-green-800">
+                <input type="checkbox" checked={useReward} onChange={(e) => setUseReward(e.target.checked)} />
+                🎁 Aplicar bebida gratis
+                {useReward && freeIdx < 0 && <span className="text-amber-700"> (agrega una bebida de hasta 12oz)</span>}
+              </label>
+            )}
+          </div>
+        )}
+        {freeIdx >= 0 && (
+          <p className="flex justify-between text-sm text-green-700">
+            <span>🎁 Bebida gratis ({lines[freeIdx].p.name})</span>
+            <span>−{money(freeValue)}</span>
+          </p>
+        )}
 
         <div className="grid grid-cols-3 gap-1">
           {(["efectivo", "tarjeta", "transferencia"] as Method[]).map((m) => (

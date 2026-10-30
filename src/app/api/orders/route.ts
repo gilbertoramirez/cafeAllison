@@ -4,6 +4,7 @@ import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { normalizeCp, quoteDelivery } from "@/lib/delivery";
 import { cardPricing, onlinePrice, processorFee } from "@/lib/fees";
 import { createCheckoutSession } from "@/lib/payments";
+import { verifyRedeemCode } from "@/lib/loyalty";
 import { siteUrl } from "@/lib/url";
 import { onlyDigits } from "@/lib/format";
 
@@ -20,6 +21,9 @@ type Body = {
   notes?: string;
   paymentMethod?: string;
   cashGiven?: number | null;
+  /** canjear la bebida gratis (requiere el código enviado al teléfono) */
+  useReward?: boolean;
+  loyaltyCode?: string;
 };
 
 function bad(error: string, status = 400) {
@@ -64,6 +68,10 @@ export async function POST(req: Request) {
   const paymentMethod =
     pm === "stripe" && stripeEnabled() ? "stripe" : pm === "whatsapp" && settings.whatsapp_number ? "whatsapp" : "efectivo";
 
+  if (body.useReward && !(await verifyRedeemCode(phone, String(body.loyaltyCode ?? "")))) {
+    return bad("El código para tu bebida gratis no es correcto o ya venció.");
+  }
+
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
   let order;
@@ -97,6 +105,7 @@ export async function POST(req: Request) {
         return q.ok ? q.fee : 0;
       },
       minSubtotal: deliveryType === "domicilio" ? settings.min_delivery_order : 0,
+      redeemRewardFor: body.useReward ? phone : undefined,
       enforceDays: true,
     });
   } catch (e) {

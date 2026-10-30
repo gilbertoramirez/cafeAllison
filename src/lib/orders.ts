@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { all, get, transaction } from "./db";
 import { availableToday } from "./format";
+import { awardStamp, claimRewardForUpdate, revokeLoyaltyForOrder } from "./loyalty";
+import { FREE_NOTE, normalizePhone, pickFreeLine } from "./loyaltyRules";
 import type { Order, OrderItem, OrderStatus, PaymentMethod, Product } from "./types";
 import { daysLabel, productLabel } from "./types";
 
@@ -36,6 +38,8 @@ export type NewOrderInput = {
   enforceDays?: boolean;
   /** En mostrador: rechaza si el efectivo recibido no cubre el total. */
   cashMustCover?: boolean;
+  /** Canjear la bebida gratis del programa de lealtad de este teléfono (ya verificado). */
+  redeemRewardFor?: string;
 };
 
 /**
@@ -79,13 +83,28 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
       }
     }
     // Mínimo y envío se calculan con los precios normales (iguales para cualquier forma de pago)
-    let baseSubtotal = 0;
-    const lines: { p: Product; qty: number; note: string; price: number }[] = [];
+    const lines: { p: Product; qty: number; note: string; price: number; free?: boolean }[] = [];
     for (const { productId, qty, note } of merged.values()) {
       const p = products.get(productId)!;
-      baseSubtotal += p.price * qty;
       lines.push({ p, qty, note, price: p.price });
     }
+
+    // Bebida gratis (lealtad): una unidad de la bebida elegible más cara pasa a costar $0
+    let rewardId: number | null = null;
+    if (input.redeemRewardFor) {
+      const reward = await claimRewardForUpdate(q, normalizePhone(input.redeemRewardFor));
+      if (!reward) throw new OrderError("No tienes una bebida gratis disponible.");
+      const idx = pickFreeLine(lines.map((l) => ({ category: l.p.category, size: l.p.size, price: l.p.price })));
+      if (idx < 0) throw new OrderError("Para usar tu bebida gratis agrega una bebida de hasta 12oz.");
+      const l = lines[idx];
+      const freeLine = { p: l.p, qty: 1, note: l.note ? `${l.note} · ${FREE_NOTE}` : FREE_NOTE, price: 0, free: true };
+      if (l.qty > 1) {
+        l.qty -= 1;
+        lines.splice(idx + 1, 0, freeLine);
+      } else lines[idx] = freeLine;
+      rewardId = reward.id;
+    }
+    const baseSubtotal = lines.reduce((a, l) => a + (l.free ? 0 : l.p.price * l.qty), 0);
 
     if (input.minSubtotal && baseSubtotal < input.minSubtotal) {
       throw new OrderError("El pedido no alcanza el mínimo para entrega a domicilio.");
@@ -93,8 +112,8 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
     const fee = typeof input.deliveryFee === "function" ? input.deliveryFee(baseSubtotal) : (input.deliveryFee ?? 0);
     let deliveryFee = input.deliveryType === "domicilio" ? fee : 0;
     if (input.pricing) {
-      const priced = input.pricing(lines.map((l) => ({ price: l.p.price, qty: l.qty })), deliveryFee);
-      lines.forEach((l, i) => (l.price = priced.prices[i] ?? l.p.price));
+      const priced = input.pricing(lines.map((l) => ({ price: l.free ? 0 : l.p.price, qty: l.qty })), deliveryFee);
+      lines.forEach((l, i) => (l.price = l.free ? 0 : (priced.prices[i] ?? l.p.price)));
       deliveryFee = priced.delivery;
     }
     const subtotal = lines.reduce((a, l) => a + l.price * l.qty, 0);
@@ -138,6 +157,14 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
       ],
     );
 
+    if (rewardId) {
+      await q("UPDATE loyalty_rewards SET status = 'canjeado', redeemed_order_id = ?, redeemed_at = ? WHERE id = ?", [
+        newId,
+        now,
+        rewardId,
+      ]);
+    }
+
     // Visible en el panel desde ya, salvo que esté esperando el pago en línea
     await q("UPDATE orders SET confirmed_seq = change_seq WHERE id = ? AND status <> 'pago_pendiente'", [newId]);
 
@@ -156,6 +183,7 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
     }
     return newId;
   });
+  if (input.paid) await awardStamp(orderId).catch((e) => console.error("lealtad", e));
   return (await getOrderById(orderId))!;
 }
 
@@ -198,6 +226,7 @@ export async function setOrderStatus(orderId: number, status: OrderStatus, reaso
       await q("UPDATE orders SET confirmed_seq = nextval('orders_change_seq') WHERE id = ?", [orderId]);
     }
     if (status === "cancelado") {
+      await revokeLoyaltyForOrder(q, orderId);
       await q("UPDATE orders SET cancel_reason = ?, cancelled_at = ? WHERE id = ?", [
         reason.trim().slice(0, 200),
         new Date().toISOString(),
@@ -246,7 +275,9 @@ export async function markOrderPaid(orderId: number) {
       [orderId],
     );
   });
+  await awardStamp(orderId).catch((e) => console.error("lealtad", e));
 }
+
 
 export function orderCode(id: number) {
   return "#" + String(id).padStart(4, "0");

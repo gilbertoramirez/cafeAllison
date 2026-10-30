@@ -38,7 +38,7 @@ export default async function Home() {
           )}
         </div>
       </header>
-      <MyOrders />
+      <MyOrders loyaltyRules={settings.loyalty} />
       <Shop
         products={products.map((p) => ({
           id: p.id,
@@ -63,6 +63,7 @@ export default async function Home() {
           whatsapp: Boolean(settings.whatsapp_number),
           stripe: stripeEnabled(),
           onlineFee: settings.online_fee,
+          loyalty: settings.loyalty,
         }}
       />
       <footer className="mt-auto border-t border-cafe-100 py-6 text-center text-xs text-cafe-600">

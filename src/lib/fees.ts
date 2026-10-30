@@ -59,7 +59,10 @@ export function cardPricing(
   if (residual <= 0 || !lines.length) return { prices, delivery };
   if (delivery > 0) return { prices, delivery: delivery + Math.ceil(residual / 100) * 100 };
   // Envío gratis: de preferencia en un producto de cantidad 1, para no multiplicar el ajuste
-  const idx = Math.max(0, lines.findIndex((l) => l.qty === 1));
+  // (nunca en un producto gratis, que tiene precio $0)
+  let idx = lines.findIndex((l) => l.qty === 1 && l.price > 0);
+  if (idx < 0) idx = lines.findIndex((l) => l.price > 0);
+  if (idx < 0) return { prices, delivery };
   prices[idx] += Math.ceil(residual / lines[idx].qty / 100) * 100;
   return { prices, delivery };
 }

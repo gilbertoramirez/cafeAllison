@@ -14,7 +14,8 @@ export async function createCheckoutSession(order: Order, businessName: string, 
     client_reference_id: String(order.id),
     metadata: { order_id: String(order.id) },
     line_items: [
-      ...items.map((i) => ({
+      // las bebidas gratis ($0) no se mandan a Stripe
+      ...items.filter((i) => i.unit_price > 0).map((i) => ({
         quantity: i.qty,
         price_data: {
           currency: "mxn",

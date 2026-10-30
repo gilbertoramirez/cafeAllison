@@ -8,6 +8,8 @@ import { addDays, addMonths, localDate, toCents } from "@/lib/format";
 import { createOrder, deleteCancelledOrder, markOrderPaid, OrderError, setOrderStatus } from "@/lib/orders";
 import { setSetting } from "@/lib/settings";
 import { parseCps } from "@/lib/delivery";
+import { normalizePhone, type LoyaltyStatus } from "@/lib/loyaltyRules";
+import { loyaltyStatus } from "@/lib/loyalty";
 import { ticketsByIds } from "@/lib/tickets-server";
 import type { TicketData } from "@/lib/ticket";
 import type { Expense, OrderStatus, PaymentMethod } from "@/lib/types";
@@ -50,6 +52,10 @@ export async function posSale(input: {
   paymentMethod: PaymentMethod;
   cashGiven: number | null; // centavos
   customerName: string;
+  /** teléfono del cliente para el programa de lealtad (opcional) */
+  phone?: string;
+  /** canjear la bebida gratis del teléfono (en caja la verifica quien atiende) */
+  useReward?: boolean;
 }): Promise<
   { ok: true; orderId: number; total: number; change: number; ticket: TicketData | null } | { ok: false; error: string }
 > {
@@ -62,6 +68,8 @@ export async function posSale(input: {
       channel: "mostrador",
       items: input.items,
       customerName: input.customerName,
+      phone: normalizePhone(input.phone ?? ""),
+      redeemRewardFor: input.useReward ? input.phone : undefined,
       deliveryType: "mostrador",
       paymentMethod: pm,
       paid: true,
@@ -405,5 +413,23 @@ export async function saveOnlineFee(formData: FormData) {
   await setSetting("online_fee_percent", clamp(num(formData, "percent"), 20));
   await setSetting("online_fee_fixed", String(toCents(formData.get("fixed"))));
   await setSetting("online_fee_iva", clamp(num(formData, "iva"), 30));
+  done();
+}
+
+// ---------- Lealtad ----------
+
+/** Sellos de un cliente (para la caja). */
+export async function getLoyalty(phone: string): Promise<LoyaltyStatus | null> {
+  await requireAdmin();
+  return loyaltyStatus(phone);
+}
+
+export async function saveLoyaltySettings(formData: FormData) {
+  await requireAdmin();
+  await setSetting("loyalty_enabled", formData.get("enabled") ? "1" : "0");
+  await setSetting("loyalty_stamps_needed", String(Math.min(Math.max(int(formData, "needed"), 1), 50)));
+  await setSetting("loyalty_min_purchase", String(toCents(formData.get("min"))));
+  await setSetting("loyalty_stamp_months", String(Math.min(Math.max(int(formData, "months"), 1), 24)));
+  await setSetting("loyalty_reward_days", String(Math.min(Math.max(int(formData, "days"), 1), 365)));
   done();
 }

@@ -181,6 +181,33 @@ CREATE TABLE IF NOT EXISTS expenses (
   created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
   paid_at TEXT
 );
+CREATE TABLE IF NOT EXISTS loyalty_stamps (
+  id SERIAL PRIMARY KEY,
+  phone TEXT NOT NULL,
+  order_id INTEGER NOT NULL UNIQUE,
+  stamp_date TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  reward_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+  UNIQUE (phone, stamp_date)
+);
+CREATE INDEX IF NOT EXISTS idx_stamps_phone ON loyalty_stamps(phone);
+CREATE TABLE IF NOT EXISTS loyalty_rewards (
+  id SERIAL PRIMARY KEY,
+  phone TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'disponible',
+  earned_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  redeemed_order_id INTEGER,
+  redeemed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_rewards_phone ON loyalty_rewards(phone);
+CREATE TABLE IF NOT EXISTS loyalty_codes (
+  phone TEXT PRIMARY KEY,
+  code_hash TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -336,6 +363,11 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   online_fee_percent: "3.6",
   online_fee_fixed: "300",
   online_fee_iva: "16",
+  loyalty_enabled: "1",
+  loyalty_stamps_needed: "10",
+  loyalty_min_purchase: "5000",
+  loyalty_stamp_months: "6",
+  loyalty_reward_days: "30",
   store_open: "1",
   address: "",
   hours: "Lun a Sáb 8:00 – 20:00",

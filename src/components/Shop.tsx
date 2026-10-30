@@ -6,6 +6,8 @@ import { money } from "@/lib/format";
 import { normalizeCp, quoteDelivery, type DeliveryRules } from "@/lib/delivery";
 import { cardPricing, type OnlineFeeRules } from "@/lib/fees";
 import { rememberOrder } from "@/lib/myOrders";
+import { normalizePhone, pickFreeLine, type LoyaltySettings, type LoyaltyStatus } from "@/lib/loyaltyRules";
+import LoyaltyCard from "./LoyaltyCard";
 
 export type ShopProduct = {
   id: number;
@@ -33,6 +35,7 @@ type ShopSettings = {
   whatsapp: boolean;
   stripe: boolean;
   onlineFee: OnlineFeeRules;
+  loyalty: LoyaltySettings;
 };
 
 /** Una línea del pedido: mismo producto con distintas indicaciones = líneas distintas */
@@ -82,6 +85,56 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [locating, setLocating] = useState(false);
+  // Lealtad: sellos del teléfono y canje de bebida gratis con código
+  const [loyalty, setLoyalty] = useState<LoyaltyStatus | null>(null);
+  const [onlineRedeem, setOnlineRedeem] = useState(false);
+  const [redeem, setRedeem] = useState<{ stage: "off" | "code" | "on"; code: string; info: string }>({
+    stage: "off",
+    code: "",
+    info: "",
+  });
+  const loyaltyPhone = normalizePhone(phone);
+  useEffect(() => {
+    if (!settings.loyalty.enabled || !loyaltyPhone) return setLoyalty(null); // eslint-disable-line react-hooks/set-state-in-effect
+    let alive = true;
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/lealtad?phone=${loyaltyPhone}`, { cache: "no-store" });
+        const data = await res.json();
+        if (alive) {
+          setLoyalty(data.status);
+          setOnlineRedeem(data.onlineRedeem);
+        }
+      } catch {}
+    }, 400);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [loyaltyPhone, settings.loyalty.enabled]);
+  useEffect(() => setRedeem({ stage: "off", code: "", info: "" }), [loyaltyPhone]); // eslint-disable-line react-hooks/set-state-in-effect
+
+  async function sendCode() {
+    setRedeem((r) => ({ ...r, info: "Enviando código…" }));
+    try {
+      const res = await fetch("/api/lealtad/codigo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: loyaltyPhone }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setRedeem({
+        stage: "code",
+        code: "",
+        info: data.devCode
+          ? `Modo de prueba: tu código es ${data.devCode}`
+          : "Te enviamos un código por mensaje. Escríbelo aquí:",
+      });
+    } catch (e) {
+      setRedeem({ stage: "off", code: "", info: e instanceof Error ? e.message : "No se pudo enviar el código" });
+    }
+  }
 
   // Restaura carrito y datos del cliente guardados en este dispositivo (después de hidratar).
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -148,25 +201,46 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
   const count = lines.reduce((a, l) => a + l.qty, 0);
   const subtotal = lines.reduce((a, l) => a + l.p.price * l.qty, 0); // a precio normal (envío y mínimo)
   const menuSubtotal = lines.reduce((a, l) => a + l.p.menuPrice * l.qty, 0);
+  // Bebida gratis: una unidad de la bebida elegible más cara (mismo criterio que el servidor)
+  const freeIdx =
+    redeem.stage === "on"
+      ? pickFreeLine(lines.map((l) => ({ category: l.p.category, size: l.p.size, price: l.p.price })))
+      : -1;
+  const freeBase = freeIdx >= 0 ? lines[freeIdx].p.price : 0;
+  const payableSubtotal = subtotal - freeBase; // a precio normal, sin la bebida gratis
   const byZones = settings.delivery.zones.length > 0;
-  const quote = quoteDelivery(settings.delivery, postalCode, subtotal);
+  const quote = quoteDelivery(settings.delivery, postalCode, payableSubtotal);
   const fee = deliveryType === "domicilio" && quote.ok ? quote.fee : 0;
   const missingForFree =
-    deliveryType === "domicilio" && settings.delivery.freeFrom > 0 && subtotal < settings.delivery.freeFrom
-      ? settings.delivery.freeFrom - subtotal
+    deliveryType === "domicilio" && settings.delivery.freeFrom > 0 && payableSubtotal < settings.delivery.freeFrom
+      ? settings.delivery.freeFrom - payableSubtotal
       : 0;
   const deliveryBlocked = deliveryType === "domicilio" && !quote.ok;
   // La tienda siempre cobra los precios del menú en línea (mismo cálculo que el servidor);
   // con tarjeta se suma además el cargo fijo de Stripe (en el envío o en un producto).
+  // Líneas para calcular (la unidad gratis va aparte a $0, igual que en el servidor)
+  const calc = lines.flatMap((l, i) =>
+    i === freeIdx
+      ? [...(l.qty > 1 ? [{ i, qty: l.qty - 1, free: false }] : []), { i, qty: 1, free: true }]
+      : [{ i, qty: l.qty, free: false }],
+  );
   const priced =
     settings.stripe && payment === "stripe"
-      ? cardPricing(lines.map((l) => ({ price: l.p.price, qty: l.qty })), fee, settings.onlineFee)
-      : { prices: lines.map((l) => l.p.menuPrice), delivery: fee };
-  const unitPrices = priced.prices;
+      ? cardPricing(
+          calc.map((c) => ({ price: c.free ? 0 : lines[c.i].p.price, qty: c.qty })),
+          fee,
+          settings.onlineFee,
+        )
+      : { prices: calc.map((c) => (c.free ? 0 : lines[c.i].p.menuPrice)), delivery: fee };
+  const unitPrices = lines.map((l, i) => {
+    const k = calc.findIndex((c) => c.i === i && !c.free);
+    return k >= 0 ? priced.prices[k] : l.p.menuPrice;
+  });
+  const freeValue = freeIdx >= 0 ? lines[freeIdx].p.menuPrice : 0;
   const deliveryCharged = priced.delivery;
-  const itemsTotal = lines.reduce((a, l, i) => a + unitPrices[i] * l.qty, 0);
+  const itemsTotal = calc.reduce((a, c, k) => a + priced.prices[k] * c.qty, 0);
   const total = itemsTotal + deliveryCharged;
-  const belowMin = deliveryType === "domicilio" && subtotal < settings.minDeliveryOrder;
+  const belowMin = deliveryType === "domicilio" && payableSubtotal < settings.minDeliveryOrder;
 
   function addToCart(p: ShopProduct, qty: number, note: string) {
     const clean = note.trim().slice(0, 120);
@@ -246,11 +320,16 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
           lng: coords?.lng ?? null,
           notes,
           paymentMethod: payment,
+          useReward: redeem.stage === "on",
+          loyaltyCode: redeem.stage === "on" ? redeem.code : undefined,
           cashGiven: payment === "efectivo" && cashGiven ? Number(cashGiven) : null,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "No se pudo enviar el pedido");
+      if (!res.ok) {
+        if (/código/i.test(data.error ?? "")) setRedeem({ stage: "off", code: "", info: "" });
+        throw new Error(data.error || "No se pudo enviar el pedido");
+      }
       rememberOrder(data.token); // para verlo en "Mis pedidos"
       if (data.checkoutUrl) {
         // El carrito se conserva hasta confirmar el pago (por si el cliente se regresa)
@@ -336,6 +415,52 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
                 />
               </div>
             </div>
+            {loyalty && (
+              <div className="space-y-2">
+                <LoyaltyCard status={loyalty} compact />
+                {loyalty.rewards.length > 0 &&
+                  (!onlineRedeem ? (
+                    <p className="text-sm text-cafe-700">Tu bebida gratis se canjea en la caja de la cafetería.</p>
+                  ) : redeem.stage === "on" ? (
+                    <p className="rounded-lg bg-green-50 p-2 text-sm text-green-800">
+                      🎁 Bebida gratis aplicada
+                      {freeIdx < 0 && " — agrega una bebida de hasta 12oz a tu pedido para usarla"}.{" "}
+                      <button type="button" className="underline" onClick={() => setRedeem({ stage: "off", code: "", info: "" })}>
+                        Quitar
+                      </button>
+                    </p>
+                  ) : redeem.stage === "code" ? (
+                    <div className="space-y-2 rounded-lg bg-cafe-50 p-3 text-sm">
+                      <p>{redeem.info}</p>
+                      <div className="flex gap-2">
+                        <input
+                          className="input w-36 text-center tracking-widest"
+                          inputMode="numeric"
+                          maxLength={6}
+                          placeholder="000000"
+                          value={redeem.code}
+                          onChange={(e) => setRedeem({ ...redeem, code: e.target.value.replace(/\D/g, "") })}
+                        />
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          disabled={redeem.code.length !== 6}
+                          onClick={() => setRedeem({ ...redeem, stage: "on" })}
+                        >
+                          Aplicar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <button type="button" className="btn-secondary w-full" onClick={sendCode}>
+                        🎁 Usar mi bebida gratis en este pedido
+                      </button>
+                      {redeem.info && <p className="text-sm text-cafe-700">{redeem.info}</p>}
+                    </div>
+                  ))}
+              </div>
+            )}
             {deliveryType === "domicilio" && (
               <>
                 <div>
@@ -439,7 +564,8 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
           </section>
 
           <section className="card space-y-1 text-sm">
-            <Row label="Subtotal" value={money(itemsTotal)} />
+            <Row label="Subtotal" value={money(itemsTotal + freeValue)} />
+            {freeIdx >= 0 && <Row label={`🎁 Bebida gratis (${lines[freeIdx].p.name})`} value={`−${money(freeValue)}`} />}
             {deliveryType === "domicilio" && quote.ok && (
               <Row
                 label={quote.zone ? `Envío (${quote.zone})` : "Envío"}

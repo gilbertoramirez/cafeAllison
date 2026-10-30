@@ -3,7 +3,8 @@ import { centsToInput, money } from "@/lib/format";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { parseCps } from "@/lib/delivery";
 import { onlinePrice } from "@/lib/fees";
-import { deleteZone, saveOnlineFee, saveSettings, saveZone } from "../../actions";
+import { deleteZone, saveLoyaltySettings, saveOnlineFee, saveSettings, saveZone } from "../../actions";
+import { smsEnabled } from "@/lib/sms";
 import PrinterSettingsCard from "@/components/admin/PrinterSettingsCard";
 
 export default async function SettingsPage() {
@@ -117,6 +118,37 @@ export default async function SettingsPage() {
           </p>
         )}
       </section>
+
+      <form action={saveLoyaltySettings} className="card space-y-3 text-sm">
+        <h2 className="font-semibold">☕ Programa de lealtad</h2>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" name="enabled" defaultChecked={s.loyalty.enabled} /> Activar tarjeta de sellos
+        </label>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Field label="Sellos para premio">
+            <input name="needed" type="number" min="1" max="50" className="input" defaultValue={s.loyalty.needed} />
+          </Field>
+          <Field label="Compra mínima ($)">
+            <input name="min" type="number" step="0.01" min="0" className="input" defaultValue={centsToInput(s.loyalty.minPurchase)} />
+          </Field>
+          <Field label="Sellos duran (meses)">
+            <input name="months" type="number" min="1" max="24" className="input" defaultValue={s.loyalty.stampMonths} />
+          </Field>
+          <Field label="Bebida gratis dura (días)">
+            <input name="days" type="number" min="1" max="365" className="input" defaultValue={s.loyalty.rewardDays} />
+          </Field>
+        </div>
+        <p className="text-cafe-600">
+          1 sello por día por teléfono, en compras pagadas desde la compra mínima (en línea con el teléfono del pedido; en la caja
+          escribiendo el teléfono del cliente). Premio: una bebida de hasta 12oz. Cancelar una venta quita su sello.
+        </p>
+        <p className={smsEnabled() ? "text-green-700" : "text-amber-700"}>
+          {smsEnabled()
+            ? "✓ Canje en línea activo: el cliente recibe un código por mensaje."
+            : "Canje en línea desactivado: configura Twilio (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM). Mientras tanto se canjea en la caja."}
+        </p>
+        <button className="btn-secondary">Guardar lealtad</button>
+      </form>
 
       <PrinterSettingsCard businessName={s.business_name} />
 

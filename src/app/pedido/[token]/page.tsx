@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import LiveUpdates from "@/components/LiveUpdates";
 import PendingPayment, { ClearCartWhenPaid } from "@/components/PendingPayment";
 import { RememberOrder } from "@/components/MyOrders";
+import LoyaltyCard from "@/components/LoyaltyCard";
+import { loyaltyStatus } from "@/lib/loyalty";
 import { dateTime, money } from "@/lib/format";
 import { getOrderByToken, getOrderItems, orderCode } from "@/lib/orders";
 import { refreshStripeOrder } from "@/lib/payments";
@@ -26,7 +28,12 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/pe
     order = (await getOrderByToken(token))!;
   }
 
-  const [items, settings, base] = await Promise.all([getOrderItems(order.id), getSettings(), siteUrl()]);
+  const [items, settings, base, loyalty] = await Promise.all([
+    getOrderItems(order.id),
+    getSettings(),
+    siteUrl(),
+    order.payment_status === "pagado" ? loyaltyStatus(order.phone) : Promise.resolve(null),
+  ]);
   const trackUrl = `${base}/pedido/${order.token}`;
   const steps: OrderStatus[] = order.delivery_type === "domicilio" ? STEPS.filter((s) => s !== "listo") : STEPS.filter((s) => s !== "en_camino");
   const current = steps.indexOf(order.status);
@@ -132,6 +139,8 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/pe
             : "Recoger en sucursal"}
         </p>
       </section>
+
+      {loyalty && <LoyaltyCard status={loyalty} />}
 
       {order.channel !== "whatsapp" && whatsapp && (
         <a href={whatsapp} target="_blank" rel="noopener noreferrer" className="btn-secondary w-full">

@@ -28,6 +28,8 @@ export type TicketData = {
     created_at: string;
   };
   items: { name: string; qty: number; unit_price: number; notes: string }[];
+  /** p. ej. "Sellos: 7/10 · 1 bebida gratis" */
+  loyalty?: string;
 };
 
 export type TicketLine = { text: string; align?: "left" | "center" | "right"; bold?: boolean; big?: boolean };
@@ -122,6 +124,10 @@ export function ticketLines(d: TicketData, cols: number): TicketLine[] {
   if (o.notes) {
     sep();
     add(`NOTAS: ${o.notes}`, { bold: true });
+  }
+  if (d.loyalty) {
+    sep();
+    add(d.loyalty, { align: "center", bold: true });
   }
   sep("=");
   add("¡Gracias por tu compra!", { align: "center" });

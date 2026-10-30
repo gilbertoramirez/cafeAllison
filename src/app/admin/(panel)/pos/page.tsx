@@ -11,6 +11,7 @@ export default async function PosPage() {
         name: productLabel(p),
         icon: p.icon,
         category: p.category,
+        size: p.size,
         price: p.price,
         maxQty: p.track_stock ? Math.max(p.stock, 0) : 999,
       }))}
