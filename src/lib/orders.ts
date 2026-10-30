@@ -28,7 +28,7 @@ export type NewOrderInput = {
    * Precios unitarios a cobrar (p. ej. con la comisión del pago con tarjeta incluida).
    * Recibe las líneas a precio normal y el envío; por defecto se usan los precios normales.
    */
-  linePrices?: (lines: { price: number; qty: number }[], delivery: number) => number[];
+  pricing?: (lines: { price: number; qty: number }[], delivery: number) => { prices: number[]; delivery: number };
   /** Comisión estimada del procesador para el total final (se guarda para finanzas). */
   processingFee?: (total: number) => number;
   minSubtotal?: number;
@@ -91,10 +91,11 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
       throw new OrderError("El pedido no alcanza el mínimo para entrega a domicilio.");
     }
     const fee = typeof input.deliveryFee === "function" ? input.deliveryFee(baseSubtotal) : (input.deliveryFee ?? 0);
-    const deliveryFee = input.deliveryType === "domicilio" ? fee : 0;
-    if (input.linePrices) {
-      const prices = input.linePrices(lines.map((l) => ({ price: l.p.price, qty: l.qty })), deliveryFee);
-      lines.forEach((l, i) => (l.price = prices[i] ?? l.p.price));
+    let deliveryFee = input.deliveryType === "domicilio" ? fee : 0;
+    if (input.pricing) {
+      const priced = input.pricing(lines.map((l) => ({ price: l.p.price, qty: l.qty })), deliveryFee);
+      lines.forEach((l, i) => (l.price = priced.prices[i] ?? l.p.price));
+      deliveryFee = priced.delivery;
     }
     const subtotal = lines.reduce((a, l) => a + l.price * l.qty, 0);
     const serviceFee = 0; // la comisión va incluida en los precios, sin línea aparte

@@ -1,3 +1,4 @@
+import { onlinePrice } from "@/lib/fees";
 import { money } from "@/lib/format";
 import Link from "next/link";
 import { all } from "@/lib/db";
@@ -46,6 +47,8 @@ export default async function Home() {
           description: p.description,
           category: p.category,
           price: p.price,
+          // El menú muestra el precio con la comisión del pago en línea; en efectivo o para recoger baja al normal
+          menuPrice: stripeEnabled() ? onlinePrice(p.price, settings.online_fee) : p.price,
           image_url: p.image_url,
           soldOut: Boolean(p.track_stock) && p.stock <= 0,
           maxQty: p.track_stock ? Math.max(p.stock, 0) : 99,

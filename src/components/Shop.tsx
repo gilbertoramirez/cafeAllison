@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { money } from "@/lib/format";
 import { normalizeCp, quoteDelivery, type DeliveryRules } from "@/lib/delivery";
-import { cardLinePrices, type OnlineFeeRules } from "@/lib/fees";
+import { cardPricing, type OnlineFeeRules } from "@/lib/fees";
 
 export type ShopProduct = {
   id: number;
@@ -15,7 +15,10 @@ export type ShopProduct = {
   notToday: string | null;
   description: string;
   category: string;
+  /** precio normal (mostrador): se cobra en efectivo o para recoger */
   price: number;
+  /** precio que se muestra en el menú (con la comisión del pago en línea incluida) */
+  menuPrice: number;
   image_url: string;
   soldOut: boolean;
   maxQty: number;
@@ -142,7 +145,8 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
     .filter((l) => l.p && l.qty > 0);
   const qtyOf = (productId: number) => cart.filter((l) => l.productId === productId).reduce((a, l) => a + l.qty, 0);
   const count = lines.reduce((a, l) => a + l.qty, 0);
-  const subtotal = lines.reduce((a, l) => a + l.p.price * l.qty, 0);
+  const subtotal = lines.reduce((a, l) => a + l.p.price * l.qty, 0); // a precio normal (envío y mínimo)
+  const menuSubtotal = lines.reduce((a, l) => a + l.p.menuPrice * l.qty, 0);
   const byZones = settings.delivery.zones.length > 0;
   const quote = quoteDelivery(settings.delivery, postalCode, subtotal);
   const fee = deliveryType === "domicilio" && quote.ok ? quote.fee : 0;
@@ -154,11 +158,13 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
   // A domicilio con tarjeta en línea los precios llevan la comisión incluida (mismo cálculo que el servidor).
   // En efectivo o para recoger se cobran los precios normales.
   const withCardPrices = settings.stripe && payment === "stripe" && deliveryType === "domicilio";
-  const unitPrices = withCardPrices
-    ? cardLinePrices(lines.map((l) => ({ price: l.p.price, qty: l.qty })), fee, settings.onlineFee)
-    : lines.map((l) => l.p.price);
+  const priced = withCardPrices
+    ? cardPricing(lines.map((l) => ({ price: l.p.price, qty: l.qty })), fee, settings.onlineFee)
+    : { prices: lines.map((l) => l.p.price), delivery: fee };
+  const unitPrices = priced.prices;
+  const deliveryCharged = priced.delivery;
   const itemsTotal = lines.reduce((a, l, i) => a + unitPrices[i] * l.qty, 0);
-  const total = itemsTotal + fee;
+  const total = itemsTotal + deliveryCharged;
   const belowMin = deliveryType === "domicilio" && subtotal < settings.minDeliveryOrder;
 
   function addToCart(p: ShopProduct, qty: number, note: string) {
@@ -435,13 +441,19 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
             {deliveryType === "domicilio" && quote.ok && (
               <Row
                 label={quote.zone ? `Envío (${quote.zone})` : "Envío"}
-                value={quote.free ? "Gratis" : money(fee)}
+                value={deliveryCharged > 0 ? money(deliveryCharged) : "Gratis"}
               />
             )}
             <div className="flex justify-between pt-2 text-lg font-semibold">
               <span>Total</span>
               <span>{money(total)}</span>
             </div>
+            {!withCardPrices && menuSubtotal > itemsTotal && (
+              <p className="text-green-700">
+                💵 {deliveryType === "recoger" ? "Al recoger" : "Pagando en efectivo"} pagas el precio de mostrador: ahorras{" "}
+                {money(menuSubtotal - itemsTotal)}.
+              </p>
+            )}
             {missingForFree > 0 && !belowMin && (
               <p className="text-cafe-700">💡 Agrega {money(missingForFree)} más y tu envío es gratis.</p>
             )}
@@ -532,7 +544,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
           <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4">
             {current.items.map((variants) => {
               const first = variants[0];
-              const from = Math.min(...variants.map((v) => v.price));
+              const from = Math.min(...variants.map((v) => v.menuPrice));
               const inCart = variants.reduce((a, v) => a + qtyOf(v.id), 0);
               const unavailable = variants.every((v) => v.soldOut) ? "Agotado" : first.notToday;
               return (
@@ -601,7 +613,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
               </span>
               <span className="font-semibold">Ver pedido</span>
             </span>
-            <span className="font-semibold tabular-nums">{money(subtotal)}</span>
+            <span className="font-semibold tabular-nums">{money(menuSubtotal)}</span>
           </button>
         </div>
       )}
@@ -705,7 +717,7 @@ function ProductSheet({
             </button>
             <ProductImage p={p} size="xl" />
             <h3 className="mt-5 text-center text-2xl font-bold">{p.name}</h3>
-            <p className="mt-1 text-lg font-semibold text-cafe-200">{money(p.price)}</p>
+            <p className="mt-1 text-lg font-semibold text-cafe-200">{money(p.menuPrice)}</p>
           </div>
 
           <div className="space-y-6 p-5">
@@ -732,7 +744,7 @@ function ProductSheet({
                         <CupIcon scale={variants.length === 1 ? cupScale(v.size) : (i / (variants.length - 1)) * 2} />
                         <span className="text-sm font-bold">{rest.length ? code : v.size}</span>
                         {rest.length > 0 && <span className="-mt-1 text-[11px]">{rest.join(" ")}</span>}
-                        <span className="text-xs font-semibold">{money(v.price)}</span>
+                        <span className="text-xs font-semibold">{money(v.menuPrice)}</span>
                       </button>
                     );
                   })}
@@ -769,7 +781,7 @@ function ProductSheet({
             disabled={Boolean(blocked) || (wantsFlavor && !note.trim())}
             onClick={() => onAdd(p, qty, note)}
           >
-            {blocked ?? (wantsFlavor && !note.trim() ? "Escribe el sabor" : `Agregar · ${money(p.price * qty)}`)}
+            {blocked ?? (wantsFlavor && !note.trim() ? "Escribe el sabor" : `Agregar · ${money(p.menuPrice * qty)}`)}
           </button>
         </div>
       </div>

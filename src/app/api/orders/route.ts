@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createOrder, OrderError, setOrderStatus } from "@/lib/orders";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { normalizeCp, quoteDelivery } from "@/lib/delivery";
-import { cardLinePrices, processorFee } from "@/lib/fees";
+import { cardPricing, processorFee } from "@/lib/fees";
 import { createCheckoutSession } from "@/lib/payments";
 import { siteUrl } from "@/lib/url";
 import { onlyDigits } from "@/lib/format";
@@ -86,9 +86,9 @@ export async function POST(req: Request) {
       postalCode,
       // Solo a domicilio con tarjeta en línea: la comisión va incluida en los precios.
       // En efectivo o para recoger se respetan los precios normales.
-      linePrices:
+      pricing:
         paymentMethod === "stripe" && deliveryType === "domicilio"
-          ? (lines, delivery) => cardLinePrices(lines, delivery, settings.online_fee)
+          ? (lines, delivery) => cardPricing(lines, delivery, settings.online_fee)
           : undefined,
       processingFee: paymentMethod === "stripe" ? (total) => processorFee(total, settings.online_fee) : undefined,
       deliveryFee: (subtotal) => {
