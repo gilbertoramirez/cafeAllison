@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createOrder, getOrderItems, OrderError, orderCode, setOrderStatus } from "@/lib/orders";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { normalizeCp, quoteDelivery } from "@/lib/delivery";
-import { onlineFee, onlinePrice, processorFee } from "@/lib/fees";
+import { cardLinePrices, processorFee } from "@/lib/fees";
 import { getStripe } from "@/lib/stripe";
 import { siteUrl } from "@/lib/url";
 import { run } from "@/lib/db";
@@ -84,12 +84,11 @@ export async function POST(req: Request) {
       paid: false,
       cashGiven: num(body.cashGiven) !== null ? Math.round(num(body.cashGiven)! * 100) : null,
       postalCode,
-      // Precios de la tienda en línea: incluyen la comisión del pago en línea
-      priceFor: (p) => onlinePrice(p.price, settings.online_fee),
-      // Con tarjeta: si el redondeo no cubre el cargo fijo de Stripe, se cobra la diferencia
-      serviceFee:
-        paymentMethod === "stripe"
-          ? (base, charged) => Math.max(0, base + onlineFee(base, settings.online_fee) - charged)
+      // Solo a domicilio con tarjeta en línea: la comisión va incluida en los precios.
+      // En efectivo o para recoger se respetan los precios normales.
+      linePrices:
+        paymentMethod === "stripe" && deliveryType === "domicilio"
+          ? (lines, delivery) => cardLinePrices(lines, delivery, settings.online_fee)
           : undefined,
       processingFee: paymentMethod === "stripe" ? (total) => processorFee(total, settings.online_fee) : undefined,
       deliveryFee: (subtotal) => {

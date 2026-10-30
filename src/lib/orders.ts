@@ -24,13 +24,11 @@ export type NewOrderInput = {
   /** Calcula el envío según el subtotal (para envío gratis). */
   deliveryFee?: number | ((subtotal: number) => number);
   postalCode?: string;
-  /** Precio unitario a cobrar (p. ej. precio en línea con comisión). Por defecto, el precio del producto. */
-  priceFor?: (p: Product) => number;
   /**
-   * Cargo extra por pago en línea. Recibe el importe a precios normales (más envío) y el importe
-   * ya calculado a precios de este pedido; devuelve lo que falte para cubrir la comisión.
+   * Precios unitarios a cobrar (p. ej. con la comisión del pago con tarjeta incluida).
+   * Recibe las líneas a precio normal y el envío; por defecto se usan los precios normales.
    */
-  serviceFee?: (baseAmount: number, chargedAmount: number) => number;
+  linePrices?: (lines: { price: number; qty: number }[], delivery: number) => number[];
   /** Comisión estimada del procesador para el total final (se guarda para finanzas). */
   processingFee?: (total: number) => number;
   minSubtotal?: number;
@@ -80,24 +78,27 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
         throw new OrderError(`Solo quedan ${Math.max(p.stock, 0)} de "${productLabel(p)}".`);
       }
     }
-    let subtotal = 0;
+    // Mínimo y envío se calculan con los precios normales (iguales para cualquier forma de pago)
     let baseSubtotal = 0;
     const lines: { p: Product; qty: number; note: string; price: number }[] = [];
     for (const { productId, qty, note } of merged.values()) {
       const p = products.get(productId)!;
-      const price = input.priceFor ? input.priceFor(p) : p.price;
-      subtotal += price * qty;
       baseSubtotal += p.price * qty;
-      lines.push({ p, qty, note, price });
+      lines.push({ p, qty, note, price: p.price });
     }
 
-    if (input.minSubtotal && subtotal < input.minSubtotal) {
+    if (input.minSubtotal && baseSubtotal < input.minSubtotal) {
       throw new OrderError("El pedido no alcanza el mínimo para entrega a domicilio.");
     }
-    const fee = typeof input.deliveryFee === "function" ? input.deliveryFee(subtotal) : (input.deliveryFee ?? 0);
+    const fee = typeof input.deliveryFee === "function" ? input.deliveryFee(baseSubtotal) : (input.deliveryFee ?? 0);
     const deliveryFee = input.deliveryType === "domicilio" ? fee : 0;
-    const serviceFee = input.serviceFee ? input.serviceFee(baseSubtotal + deliveryFee, subtotal + deliveryFee) : 0;
-    const total = subtotal + deliveryFee + serviceFee;
+    if (input.linePrices) {
+      const prices = input.linePrices(lines.map((l) => ({ price: l.p.price, qty: l.qty })), deliveryFee);
+      lines.forEach((l, i) => (l.price = prices[i] ?? l.p.price));
+    }
+    const subtotal = lines.reduce((a, l) => a + l.price * l.qty, 0);
+    const serviceFee = 0; // la comisión va incluida en los precios, sin línea aparte
+    const total = subtotal + deliveryFee;
     const processingFee = input.processingFee ? input.processingFee(total) : 0;
     if (input.cashMustCover && input.cashGiven != null && input.cashGiven < total) {
       throw new OrderError("El efectivo recibido es menor al total.");

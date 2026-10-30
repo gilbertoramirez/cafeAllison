@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { money } from "@/lib/format";
 import { normalizeCp, quoteDelivery, type DeliveryRules } from "@/lib/delivery";
-import { onlineFee, type OnlineFeeRules } from "@/lib/fees";
+import { cardLinePrices, type OnlineFeeRules } from "@/lib/fees";
 
 export type ShopProduct = {
   id: number;
@@ -15,10 +15,7 @@ export type ShopProduct = {
   notToday: string | null;
   description: string;
   category: string;
-  /** precio en línea (con comisión incluida) */
   price: number;
-  /** precio normal de mostrador */
-  basePrice: number;
   image_url: string;
   soldOut: boolean;
   maxQty: number;
@@ -145,14 +142,14 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
       ? settings.delivery.freeFrom - subtotal
       : 0;
   const deliveryBlocked = deliveryType === "domicilio" && !quote.ok;
-  // Comisión por pago en línea (si el negocio la traslada al cliente)
-  // Los precios en línea ya incluyen el porcentaje; con tarjeta solo se suma lo que falte del cargo fijo
-  const baseAmount = lines.reduce((a, l) => a + l.p.basePrice * l.qty, 0) + fee;
-  const cardFee = settings.stripe
-    ? Math.max(0, baseAmount + onlineFee(baseAmount, settings.onlineFee) - (subtotal + fee))
-    : 0;
-  const serviceFee = payment === "stripe" ? cardFee : 0;
-  const total = subtotal + fee + serviceFee;
+  // A domicilio con tarjeta en línea los precios llevan la comisión incluida (mismo cálculo que el servidor).
+  // En efectivo o para recoger se cobran los precios normales.
+  const withCardPrices = settings.stripe && payment === "stripe" && deliveryType === "domicilio";
+  const unitPrices = withCardPrices
+    ? cardLinePrices(lines.map((l) => ({ price: l.p.price, qty: l.qty })), fee, settings.onlineFee)
+    : lines.map((l) => l.p.price);
+  const itemsTotal = lines.reduce((a, l, i) => a + unitPrices[i] * l.qty, 0);
+  const total = itemsTotal + fee;
   const belowMin = deliveryType === "domicilio" && subtotal < settings.minDeliveryOrder;
 
   function addToCart(p: ShopProduct, qty: number, note: string) {
@@ -251,15 +248,15 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
         <h2 className="mb-4 text-2xl font-bold">Revisa tu pedido</h2>
         <form onSubmit={submit} className="space-y-5">
           <section className="card divide-y divide-cafe-50 p-0">
-            {lines.map((l) => (
+            {lines.map((l, i) => (
               <div key={l.key} className="flex items-center gap-3 p-3">
                 <ProductImage p={l.p} size="sm" />
                 <div className="min-w-0 flex-1 text-sm">
                   <p className="font-medium">{l.p.name}</p>
                   <p className="text-xs text-cafe-600">
-                    {[l.p.size, l.note].filter(Boolean).join(" · ") || money(l.p.price)}
+                    {[l.p.size, l.note].filter(Boolean).join(" · ") || money(unitPrices[i])}
                   </p>
-                  <p className="font-semibold">{money(l.p.price * l.qty)}</p>
+                  <p className="font-semibold">{money(unitPrices[i] * l.qty)}</p>
                 </div>
                 <Stepper
                   qty={l.qty}
@@ -379,7 +376,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
                 <Choice active={payment === "stripe"} onClick={() => setPayment("stripe")}>
                   💳 Pagar en línea
                   <span className="block text-xs font-normal opacity-75">
-                    Tarjeta, seguro con Stripe{cardFee > 0 ? ` · + ${money(cardFee)} de comisión` : ""}
+                    Tarjeta, seguro con Stripe
                   </span>
                 </Choice>
               )}
@@ -413,14 +410,13 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
           </section>
 
           <section className="card space-y-1 text-sm">
-            <Row label="Subtotal" value={money(subtotal)} />
+            <Row label="Subtotal" value={money(itemsTotal)} />
             {deliveryType === "domicilio" && quote.ok && (
               <Row
                 label={quote.zone ? `Envío (${quote.zone})` : "Envío"}
                 value={quote.free ? "Gratis" : money(fee)}
               />
             )}
-            {serviceFee > 0 && <Row label="Comisión por pago en línea" value={money(serviceFee)} />}
             <div className="flex justify-between pt-2 text-lg font-semibold">
               <span>Total</span>
               <span>{money(total)}</span>
