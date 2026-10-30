@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createOrder, OrderError, setOrderStatus } from "@/lib/orders";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { normalizeCp, quoteDelivery } from "@/lib/delivery";
-import { cardPricing, processorFee } from "@/lib/fees";
+import { cardPricing, onlinePrice, processorFee } from "@/lib/fees";
 import { createCheckoutSession } from "@/lib/payments";
 import { siteUrl } from "@/lib/url";
 import { onlyDigits } from "@/lib/format";
@@ -84,12 +84,13 @@ export async function POST(req: Request) {
       status: paymentMethod === "stripe" ? "pago_pendiente" : "nuevo",
       cashGiven: num(body.cashGiven) !== null ? Math.round(num(body.cashGiven)! * 100) : null,
       postalCode,
-      // Solo a domicilio con tarjeta en línea: la comisión va incluida en los precios.
-      // En efectivo o para recoger se respetan los precios normales.
-      pricing:
-        paymentMethod === "stripe" && deliveryType === "domicilio"
+      // La tienda en línea siempre cobra los precios del menú en línea (con la comisión incluida).
+      // Con tarjeta además se cubre el cargo fijo de Stripe por cobro.
+      pricing: !stripeEnabled()
+        ? undefined
+        : paymentMethod === "stripe"
           ? (lines, delivery) => cardPricing(lines, delivery, settings.online_fee)
-          : undefined,
+          : (lines, delivery) => ({ prices: lines.map((l) => onlinePrice(l.price, settings.online_fee)), delivery }),
       processingFee: paymentMethod === "stripe" ? (total) => processorFee(total, settings.online_fee) : undefined,
       deliveryFee: (subtotal) => {
         const q = quoteDelivery(rules, postalCode, subtotal);

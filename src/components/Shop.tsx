@@ -155,12 +155,12 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
       ? settings.delivery.freeFrom - subtotal
       : 0;
   const deliveryBlocked = deliveryType === "domicilio" && !quote.ok;
-  // A domicilio con tarjeta en línea los precios llevan la comisión incluida (mismo cálculo que el servidor).
-  // En efectivo o para recoger se cobran los precios normales.
-  const withCardPrices = settings.stripe && payment === "stripe" && deliveryType === "domicilio";
-  const priced = withCardPrices
-    ? cardPricing(lines.map((l) => ({ price: l.p.price, qty: l.qty })), fee, settings.onlineFee)
-    : { prices: lines.map((l) => l.p.price), delivery: fee };
+  // La tienda siempre cobra los precios del menú en línea (mismo cálculo que el servidor);
+  // con tarjeta se suma además el cargo fijo de Stripe (en el envío o en un producto).
+  const priced =
+    settings.stripe && payment === "stripe"
+      ? cardPricing(lines.map((l) => ({ price: l.p.price, qty: l.qty })), fee, settings.onlineFee)
+      : { prices: lines.map((l) => l.p.menuPrice), delivery: fee };
   const unitPrices = priced.prices;
   const deliveryCharged = priced.delivery;
   const itemsTotal = lines.reduce((a, l, i) => a + unitPrices[i] * l.qty, 0);
@@ -448,12 +448,6 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
               <span>Total</span>
               <span>{money(total)}</span>
             </div>
-            {!withCardPrices && menuSubtotal > itemsTotal && (
-              <p className="text-green-700">
-                💵 {deliveryType === "recoger" ? "Al recoger" : "Pagando en efectivo"} pagas el precio de mostrador: ahorras{" "}
-                {money(menuSubtotal - itemsTotal)}.
-              </p>
-            )}
             {missingForFree > 0 && !belowMin && (
               <p className="text-cafe-700">💡 Agrega {money(missingForFree)} más y tu envío es gratis.</p>
             )}

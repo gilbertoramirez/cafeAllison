@@ -135,11 +135,11 @@ export default async function SettingsPage() {
           <label className="flex items-start gap-2">
             <input type="checkbox" name="enabled" className="mt-1" defaultChecked={s.online_fee.enabled} />
             <span>
-              <strong>Incluir la comisión en los precios al pagar con tarjeta a domicilio</strong>
+              <strong>Incluir la comisión de Stripe en los precios de la tienda en línea</strong>
               <span className="block text-cafe-600">
-                Solo en pedidos a domicilio pagados con tarjeta en línea: los precios de los productos llevan la comisión de
-                Stripe incluida (sin leyenda aparte), para que te llegue completo el importe. En efectivo, para recoger y en la
-                caja se cobran tus precios normales.
+                Todo el menú de la tienda en línea se muestra y cobra con la comisión incluida (redondeado al peso), sin leyenda
+                aparte. Al pagar con tarjeta se cubre además el cargo fijo por cobro (en el envío o en un producto). La caja del
+                panel usa siempre tus precios normales.
               </span>
             </span>
           </label>
@@ -157,7 +157,7 @@ export default async function SettingsPage() {
           <p className="text-xs text-cafe-600">
             Ejemplo con estas tarifas:{" "}
             {[10000, 20000, 50000]
-              .map((a) => `${money(a)} → con tarjeta ${money(onlinePrice(a, { ...s.online_fee, enabled: true }))}`)
+              .map((a) => `${money(a)} → tienda en línea ${money(onlinePrice(a, { ...s.online_fee, enabled: true }))}`)
               .join(" · ")}
             . Revisa la tarifa vigente en tu cuenta de Stripe.
           </p>
