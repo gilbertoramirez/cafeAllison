@@ -30,3 +30,22 @@ export function forgetOrder(token: string) {
     window.dispatchEvent(new Event(MY_ORDERS_EVENT));
   } catch {}
 }
+
+/** Carrito de la tienda guardado en este dispositivo. */
+export const CART_KEY = "cafe_cart_v2";
+
+/** "Pedir de nuevo": agrega al carrito los productos de un pedido anterior. */
+export function addToSavedCart(items: { productId: number | null; qty: number; note?: string }[]) {
+  try {
+    const cart = JSON.parse(localStorage.getItem(CART_KEY) || "[]") as { key: string; productId: number; qty: number; note: string }[];
+    for (const it of items) {
+      if (!it.productId || it.qty <= 0) continue;
+      const note = (it.note ?? "").trim();
+      const key = `${it.productId}|${note}`;
+      const line = cart.find((l) => l.key === key);
+      if (line) line.qty += it.qty;
+      else cart.push({ key, productId: it.productId, qty: it.qty, note });
+    }
+    localStorage.setItem(CART_KEY, JSON.stringify(cart));
+  } catch {}
+}

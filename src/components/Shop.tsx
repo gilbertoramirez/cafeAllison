@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { money } from "@/lib/format";
 import { normalizeCp, quoteDelivery, type DeliveryRules } from "@/lib/delivery";
 import { cardPricing, type OnlineFeeRules } from "@/lib/fees";
-import { rememberOrder } from "@/lib/myOrders";
+import { CART_KEY, rememberOrder } from "@/lib/myOrders";
 import { normalizePhone, pickFreeLine, type LoyaltySettings, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import LoyaltyCard from "./LoyaltyCard";
 
@@ -40,7 +40,6 @@ type ShopSettings = {
 
 /** Una línea del pedido: mismo producto con distintas indicaciones = líneas distintas */
 type CartLine = { key: string; productId: number; qty: number; note: string };
-const CART_KEY = "cafe_cart_v2";
 
 const CATEGORY_ICON: Record<string, string> = {
   "Bebidas Calientes": "☕",
@@ -408,7 +407,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
                   required
                   type="tel"
                   inputMode="tel"
-                  pattern="[0-9 +()-]{10,}"
+                  pattern="[0-9 +()\-]{10,}"
                   title="Al menos 10 dígitos"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
@@ -607,7 +606,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 pb-32">
+    <main className="mx-auto w-full max-w-5xl flex-1 pb-24">
       {/* Navegación de categorías, siempre visible */}
       <nav className="sticky top-0 z-10 border-b border-cafe-100 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl gap-5 overflow-x-auto px-4">
@@ -718,7 +717,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
       )}
 
       {count > 0 && settings.open && !detail && (
-        <div className="fixed inset-x-0 bottom-0 z-20 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 p-3">
           <button
             onClick={() => {
               setStep("checkout");

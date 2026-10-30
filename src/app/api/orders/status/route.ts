@@ -30,7 +30,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     orders: orders.map((o) => ({
       ...o,
-      items: (items.get(o.id) ?? []).map((i) => ({ name: i.name, qty: i.qty })),
+      items: (items.get(o.id) ?? []).map((i) => ({ name: i.name, qty: i.qty, productId: i.product_id, note: i.notes })),
     })),
   });
 }

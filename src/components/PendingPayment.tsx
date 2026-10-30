@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { money } from "@/lib/format";
 
 export const PENDING_KEY = "cafe_pending_order";
-const CART_KEY = "cafe_cart_v2";
+import { CART_KEY } from "@/lib/myOrders";
 
 /** Pedido con tarjeta que aún no se paga: pagar ahora o volver al menú con el carrito. */
 export default function PendingPayment({ token, total, confirming }: { token: string; total: number; confirming: boolean }) {
