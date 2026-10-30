@@ -2,7 +2,8 @@ import { Field, PageTitle } from "@/components/admin/ui";
 import { centsToInput, money } from "@/lib/format";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { parseCps } from "@/lib/delivery";
-import { deleteZone, saveSettings, saveZone } from "../../actions";
+import { onlineFee } from "@/lib/fees";
+import { deleteZone, saveOnlineFee, saveSettings, saveZone } from "../../actions";
 import PrinterSettingsCard from "@/components/admin/PrinterSettingsCard";
 
 export default async function SettingsPage() {
@@ -129,6 +130,43 @@ export default async function SettingsPage() {
             entorno (ver README). Mientras tanto los clientes pueden pagar en efectivo o por WhatsApp.
           </p>
         )}
+
+        <form action={saveOnlineFee} className="mt-3 space-y-3 border-t border-cafe-100 pt-3">
+          <label className="flex items-start gap-2">
+            <input type="checkbox" name="enabled" className="mt-1" defaultChecked={s.online_fee.enabled} />
+            <span>
+              <strong>Cobrar al cliente la comisión del pago en línea</strong>
+              <span className="block text-cafe-600">
+                Se suma como “Comisión por pago en línea” para que te llegue completo el importe del pedido. Solo aplica al
+                pagar con tarjeta en línea; efectivo y WhatsApp no la llevan.
+              </span>
+            </span>
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            <Field label="Porcentaje (%)">
+              <input name="percent" type="number" step="0.01" min="0" max="20" className="input" defaultValue={s.online_fee.percent} />
+            </Field>
+            <Field label="Cargo fijo ($)">
+              <input name="fixed" type="number" step="0.01" min="0" className="input" defaultValue={centsToInput(s.online_fee.fixed)} />
+            </Field>
+            <Field label="IVA (%)">
+              <input name="iva" type="number" step="1" min="0" max="30" className="input" defaultValue={s.online_fee.iva} />
+            </Field>
+          </div>
+          <p className="text-xs text-cafe-600">
+            Ejemplo con estas tarifas:{" "}
+            {[10000, 20000, 50000]
+              .map((a) => `pedido ${money(a)} → cliente paga ${money(a + onlineFee(a, { ...s.online_fee, enabled: true }))}`)
+              .join(" · ")}
+            . Revisa la tarifa vigente en tu cuenta de Stripe.
+          </p>
+          <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">
+            ⚠️ En México, cobrar un cargo extra por pagar con tarjeta puede considerarse práctica indebida (Profeco) y algunos
+            contratos de procesadores lo prohíben. Consúltalo con tu contador antes de activarlo. Alternativa: incluir el costo en
+            el envío o en los precios.
+          </p>
+          <button className="btn-secondary">Guardar comisión</button>
+        </form>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import type { DeliveryRules, DeliveryZone } from "./delivery";
+import type { OnlineFeeRules } from "./fees";
 import { all, run } from "./db";
 
 export type Settings = {
@@ -12,6 +13,8 @@ export type Settings = {
   store_open: boolean;
   address: string;
   hours: string;
+  /** Comisión por pago en línea trasladada al cliente */
+  online_fee: OnlineFeeRules;
 };
 
 export async function getSettings(): Promise<Settings> {
@@ -27,6 +30,12 @@ export async function getSettings(): Promise<Settings> {
     store_open: m.store_open !== "0",
     address: m.address ?? "",
     hours: m.hours ?? "",
+    online_fee: {
+      enabled: m.online_fee_enabled === "1",
+      percent: Number(m.online_fee_percent ?? 3.6),
+      fixed: Number(m.online_fee_fixed ?? 300),
+      iva: Number(m.online_fee_iva ?? 16),
+    },
   };
 }
 

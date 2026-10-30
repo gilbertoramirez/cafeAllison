@@ -146,6 +146,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS postal_code TEXT NOT NULL DEFAULT '';
 CREATE SEQUENCE IF NOT EXISTS orders_change_seq;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS service_fee INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS change_seq BIGINT NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_orders_change ON orders(change_seq);
@@ -329,6 +330,10 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   delivery_fee: "3000",
   min_delivery_order: "10000",
   free_delivery_from: "0",
+  online_fee_enabled: "0",
+  online_fee_percent: "3.6",
+  online_fee_fixed: "300",
+  online_fee_iva: "16",
   store_open: "1",
   address: "",
   hours: "Lun a Sáb 8:00 – 20:00",

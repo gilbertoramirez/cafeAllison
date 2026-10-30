@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { money } from "@/lib/format";
 import { normalizeCp, quoteDelivery, type DeliveryRules } from "@/lib/delivery";
+import { onlineFee, type OnlineFeeRules } from "@/lib/fees";
 
 export type ShopProduct = {
   id: number;
@@ -27,6 +28,7 @@ type ShopSettings = {
   minDeliveryOrder: number;
   whatsapp: boolean;
   stripe: boolean;
+  onlineFee: OnlineFeeRules;
 };
 
 /** Una línea del pedido: mismo producto con distintas indicaciones = líneas distintas */
@@ -140,7 +142,10 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
       ? settings.delivery.freeFrom - subtotal
       : 0;
   const deliveryBlocked = deliveryType === "domicilio" && !quote.ok;
-  const total = subtotal + fee;
+  // Comisión por pago en línea (si el negocio la traslada al cliente)
+  const cardFee = settings.stripe ? onlineFee(subtotal + fee, settings.onlineFee) : 0;
+  const serviceFee = payment === "stripe" ? cardFee : 0;
+  const total = subtotal + fee + serviceFee;
   const belowMin = deliveryType === "domicilio" && subtotal < settings.minDeliveryOrder;
 
   function addToCart(p: ShopProduct, qty: number, note: string) {
@@ -366,7 +371,9 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
               {settings.stripe && (
                 <Choice active={payment === "stripe"} onClick={() => setPayment("stripe")}>
                   💳 Pagar en línea
-                  <span className="block text-xs font-normal opacity-75">Tarjeta, seguro con Stripe</span>
+                  <span className="block text-xs font-normal opacity-75">
+                    Tarjeta, seguro con Stripe{cardFee > 0 ? ` · + ${money(cardFee)} de comisión` : ""}
+                  </span>
                 </Choice>
               )}
               <Choice active={payment === "efectivo"} onClick={() => setPayment("efectivo")}>
@@ -406,6 +413,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
                 value={quote.free ? "Gratis" : money(fee)}
               />
             )}
+            {serviceFee > 0 && <Row label="Comisión por pago en línea" value={money(serviceFee)} />}
             <div className="flex justify-between pt-2 text-lg font-semibold">
               <span>Total</span>
               <span>{money(total)}</span>

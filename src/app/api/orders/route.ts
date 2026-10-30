@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createOrder, getOrderItems, OrderError, orderCode, setOrderStatus } from "@/lib/orders";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { normalizeCp, quoteDelivery } from "@/lib/delivery";
+import { onlineFee } from "@/lib/fees";
 import { getStripe } from "@/lib/stripe";
 import { siteUrl } from "@/lib/url";
 import { run } from "@/lib/db";
@@ -83,6 +84,8 @@ export async function POST(req: Request) {
       paid: false,
       cashGiven: num(body.cashGiven) !== null ? Math.round(num(body.cashGiven)! * 100) : null,
       postalCode,
+      // Solo se cobra comisión cuando el cliente paga en línea
+      serviceFee: paymentMethod === "stripe" ? (amount) => onlineFee(amount, settings.online_fee) : undefined,
       deliveryFee: (subtotal) => {
         const q = quoteDelivery(rules, postalCode, subtotal);
         return q.ok ? q.fee : 0;
@@ -118,6 +121,18 @@ export async function POST(req: Request) {
             product_data: { name: i.notes ? `${i.name} · ${i.notes}` : i.name },
           },
         })),
+        ...(order.service_fee > 0
+          ? [
+              {
+                quantity: 1,
+                price_data: {
+                  currency: "mxn",
+                  unit_amount: order.service_fee,
+                  product_data: { name: "Comisión por pago en línea" },
+                },
+              },
+            ]
+          : []),
         ...(order.delivery_fee > 0
           ? [
               {

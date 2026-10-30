@@ -15,6 +15,7 @@ export function orderMessage(order: Order, items: OrderItem[], trackUrl: string)
     ...items.map((i) => `• ${i.qty} × ${i.name}${i.notes ? ` (${i.notes})` : ""} — ${money(i.unit_price * i.qty)}`),
     "",
     order.delivery_type === "domicilio" ? `Envío: ${order.delivery_fee ? money(order.delivery_fee) : "gratis"}` : null,
+    order.service_fee ? `Comisión pago en línea: ${money(order.service_fee)}` : null,
     `*Total: ${money(order.total)}*`,
     "",
     `Nombre: ${order.customer_name}`,

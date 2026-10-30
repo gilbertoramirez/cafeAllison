@@ -395,3 +395,15 @@ export async function deleteZone(id: number) {
   await run("DELETE FROM delivery_zones WHERE id = ?", [id]);
   done();
 }
+
+// ---------- Comisión por pago en línea ----------
+
+export async function saveOnlineFee(formData: FormData) {
+  await requireAdmin();
+  const clamp = (n: number, max: number) => String(Math.min(Math.max(Number.isFinite(n) ? n : 0, 0), max));
+  await setSetting("online_fee_enabled", formData.get("enabled") ? "1" : "0");
+  await setSetting("online_fee_percent", clamp(num(formData, "percent"), 20));
+  await setSetting("online_fee_fixed", String(toCents(formData.get("fixed"))));
+  await setSetting("online_fee_iva", clamp(num(formData, "iva"), 30));
+  done();
+}

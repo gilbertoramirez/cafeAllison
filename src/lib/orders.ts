@@ -24,6 +24,8 @@ export type NewOrderInput = {
   /** Calcula el envío según el subtotal (para envío gratis). */
   deliveryFee?: number | ((subtotal: number) => number);
   postalCode?: string;
+  /** Comisión por pago en línea, calculada sobre subtotal + envío. */
+  serviceFee?: (amount: number) => number;
   minSubtotal?: number;
   /** Pedidos en línea: respeta los días de venta de cada producto. */
   enforceDays?: boolean;
@@ -84,7 +86,8 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
     }
     const fee = typeof input.deliveryFee === "function" ? input.deliveryFee(subtotal) : (input.deliveryFee ?? 0);
     const deliveryFee = input.deliveryType === "domicilio" ? fee : 0;
-    const total = subtotal + deliveryFee;
+    const serviceFee = input.serviceFee ? input.serviceFee(subtotal + deliveryFee) : 0;
+    const total = subtotal + deliveryFee + serviceFee;
     if (input.cashMustCover && input.cashGiven != null && input.cashGiven < total) {
       throw new OrderError("El efectivo recibido es menor al total.");
     }
@@ -94,8 +97,8 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
     const [{ id: newId }] = await q<{ id: number }>(
       `INSERT INTO orders (token, channel, status, customer_name, phone, delivery_type, address, address_ref,
          lat, lng, notes, payment_method, payment_status, cash_given, subtotal, delivery_fee, total, created_at, paid_at, postal_code,
-         change_seq)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, nextval('orders_change_seq')) RETURNING id`,
+         service_fee, change_seq)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, nextval('orders_change_seq')) RETURNING id`,
       [
         token,
         input.channel,
@@ -117,6 +120,7 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
         now,
         input.paid ? now : null,
         (input.postalCode ?? "").slice(0, 10),
+        serviceFee,
       ],
     );
 

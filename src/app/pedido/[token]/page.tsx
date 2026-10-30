@@ -106,6 +106,12 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/pe
             <span>{order.delivery_fee > 0 ? money(order.delivery_fee) : "Gratis"}</span>
           </div>
         )}
+        {order.service_fee > 0 && (
+          <div className="flex justify-between text-cafe-700">
+            <span>Comisión por pago en línea</span>
+            <span>{money(order.service_fee)}</span>
+          </div>
+        )}
         <div className="flex justify-between border-t border-cafe-100 pt-2 text-base font-semibold">
           <span>Total</span>
           <span>{money(order.total)}</span>

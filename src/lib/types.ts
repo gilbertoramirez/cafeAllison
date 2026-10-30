@@ -53,6 +53,8 @@ export type Order = {
   paid_at: string | null;
   cancel_reason: string;
   cancelled_at: string | null;
+  /** comisión por pago en línea cobrada al cliente (centavos) */
+  service_fee: number;
 };
 
 export type OrderItem = {

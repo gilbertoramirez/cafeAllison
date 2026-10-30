@@ -111,6 +111,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     <span>{o.delivery_fee > 0 ? money(o.delivery_fee) : "Gratis"}</span>
                   </li>
                 )}
+                {o.service_fee > 0 && (
+                  <li className="flex justify-between text-cafe-600">
+                    <span>Comisión pago en línea</span>
+                    <span>{money(o.service_fee)}</span>
+                  </li>
+                )}
                 <li className="mt-1 flex justify-between border-t border-cafe-100 pt-1 font-semibold">
                   <span>Total</span>
                   <span>{money(o.total)}</span>

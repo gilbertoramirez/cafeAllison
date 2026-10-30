@@ -57,6 +57,7 @@ export default async function Home() {
           minDeliveryOrder: settings.min_delivery_order,
           whatsapp: Boolean(settings.whatsapp_number),
           stripe: stripeEnabled(),
+          onlineFee: settings.online_fee,
         }}
       />
       <footer className="mt-auto border-t border-cafe-100 py-6 text-center text-xs text-cafe-600">
