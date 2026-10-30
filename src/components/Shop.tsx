@@ -96,10 +96,19 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
       if (cust.address) setAddress(cust.address);
       if (cust.postalCode) setPostalCode(cust.postalCode);
       if (cust.addressRef) setAddressRef(cust.addressRef);
+      // Regreso desde "Cambiar forma de pago": abrir directo la revisión del pedido
+      if (new URLSearchParams(window.location.search).get("pedido") === "1") setStep("checkout");
     } catch {}
     setLoaded(true);
   }, [products]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Al regresar con "atrás" desde Stripe, la página puede venir de la caché del navegador
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => e.persisted && setSending(false);
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
 
   useEffect(() => {
     if (!loaded) return;
@@ -206,6 +215,14 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
     try {
       localStorage.setItem(CUSTOMER_KEY, JSON.stringify({ name, phone, address, addressRef, postalCode }));
     } catch {}
+    // Si hay un intento de pago con tarjeta sin terminar, se cancela antes de crear el nuevo pedido
+    try {
+      const prevToken = localStorage.getItem("cafe_pending_order");
+      if (prevToken) {
+        localStorage.removeItem("cafe_pending_order");
+        await fetch(`/api/orders/${prevToken}/cancelar`, { method: "POST" }).catch(() => {});
+      }
+    } catch {}
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -227,12 +244,16 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo enviar el pedido");
-      setCart([]);
       if (data.checkoutUrl) {
+        // El carrito se conserva hasta confirmar el pago (por si el cliente se regresa)
+        try {
+          localStorage.setItem("cafe_pending_order", data.token);
+        } catch {}
         window.location.assign(data.checkoutUrl);
-      } else {
-        router.push(`/pedido/${data.token}${payment === "whatsapp" ? "?wa=1" : ""}`);
+        return;
       }
+      setCart([]);
+      router.push(`/pedido/${data.token}${payment === "whatsapp" ? "?wa=1" : ""}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error inesperado");
       setSending(false);

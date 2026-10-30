@@ -16,7 +16,7 @@ export default async function Dashboard() {
     pendingExpenses(),
     all<Product>("SELECT * FROM products WHERE active = 1 AND track_stock = 1 AND stock <= min_stock ORDER BY stock"),
     all<Supply>("SELECT * FROM supplies WHERE qty <= min_qty ORDER BY name"),
-    all<Order>("SELECT * FROM orders WHERE status NOT IN ('entregado','cancelado') ORDER BY created_at"),
+    all<Order>("SELECT * FROM orders WHERE status NOT IN ('entregado','cancelado','pago_pendiente') ORDER BY created_at"),
   ]);
 
   const todayYmd = localDate();

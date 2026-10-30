@@ -148,6 +148,7 @@ CREATE SEQUENCE IF NOT EXISTS orders_change_seq;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT NOT NULL DEFAULT '';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS service_fee INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS processing_fee INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS confirmed_seq BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS change_seq BIGINT NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_orders_change ON orders(change_seq);
@@ -355,6 +356,8 @@ async function init(b: Backend) {
       );
     }
     await q("UPDATE products SET description = ? WHERE description = ?", [FLAVOR, OLD_FLAVOR]);
+    // Pedidos anteriores ya confirmados: marca de "visible en el panel" para comandas automáticas
+    await q("UPDATE orders SET confirmed_seq = change_seq WHERE confirmed_seq = 0 AND status <> 'pago_pendiente'");
     // Una sola vez: activar precios en línea con comisión y migrar el dato de finanzas
     const [feeMig] = await q<{ value: string }>("SELECT value FROM settings WHERE key = 'online_fee_v2'");
     if (!feeMig) {

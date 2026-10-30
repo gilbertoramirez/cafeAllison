@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import LiveUpdates from "@/components/LiveUpdates";
+import PendingPayment, { ClearCartWhenPaid } from "@/components/PendingPayment";
 import { dateTime, money } from "@/lib/format";
 import { getOrderByToken, getOrderItems, orderCode } from "@/lib/orders";
 import { refreshStripeOrder } from "@/lib/payments";
@@ -30,6 +31,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/pe
   const current = steps.indexOf(order.status);
   const whatsapp = settings.whatsapp_number ? waLink(settings.whatsapp_number, orderMessage(order, items, trackUrl)) : null;
   const finished = order.status === "entregado" || order.status === "cancelado";
+  const awaitingPayment = order.status === "pago_pendiente" && order.payment_status !== "pagado";
 
   return (
     <main className="mx-auto w-full max-w-xl flex-1 space-y-4 px-4 py-8">
@@ -47,14 +49,8 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/pe
       {sp.pago === "ok" && order.payment_status === "pagado" && (
         <p className="rounded-lg bg-green-50 p-3 text-green-800">¡Pago recibido! Ya estamos preparando tu pedido.</p>
       )}
-      {sp.pago === "ok" && order.payment_status !== "pagado" && order.status !== "cancelado" && (
-        <p className="rounded-lg bg-amber-50 p-3 text-amber-800">Estamos confirmando tu pago, esta página se actualizará sola.</p>
-      )}
-      {sp.pago === "cancelado" && order.payment_status !== "pagado" && (
-        <p className="rounded-lg bg-amber-50 p-3 text-amber-800">
-          El pago no se completó. Si quieres, vuelve al menú y elige otra forma de pago.
-        </p>
-      )}
+      {awaitingPayment && <PendingPayment token={order.token} total={order.total} confirming={sp.pago === "ok"} />}
+      {order.payment_method === "stripe" && order.payment_status === "pagado" && <ClearCartWhenPaid token={order.token} />}
 
       {order.channel === "whatsapp" && whatsapp && (
         <div className="card space-y-2 border-[#25D366]">
@@ -69,7 +65,11 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/pe
 
       <section className="card">
         {order.status === "cancelado" ? (
-          <p className="font-medium text-red-700">Este pedido fue cancelado.</p>
+          <p className="font-medium text-red-700">
+            Este pedido fue cancelado{order.cancel_reason ? `: ${order.cancel_reason.toLowerCase()}` : ""}.
+          </p>
+        ) : awaitingPayment ? (
+          <p className="text-sm text-cafe-600">El pedido se enviará a la cafetería en cuanto se confirme el pago.</p>
         ) : (
           <ol className="space-y-3">
             {steps.map((s, i) => (

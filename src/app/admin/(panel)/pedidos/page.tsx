@@ -20,6 +20,7 @@ const FILTERS = {
 } as const;
 
 const STATUS_COLOR: Record<OrderStatus, string> = {
+  pago_pendiente: "bg-amber-100 text-amber-800",
   nuevo: "bg-blue-100 text-blue-800",
   preparando: "bg-amber-100 text-amber-800",
   listo: "bg-purple-100 text-purple-800",
@@ -41,14 +42,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const today = startOfLocalDay(localDate());
   const where =
     f === "hoy"
-      ? ["created_at >= ?", [today]]
+      ? ["created_at >= ? AND status <> 'pago_pendiente'", [today]]
       : f === "caja"
         ? ["channel = 'mostrador' AND created_at >= ?", [today]]
         : f === "canceladas"
           ? ["status = 'cancelado'", []]
           : f === "todos"
             ? ["1=1", []]
-            : ["status NOT IN ('entregado','cancelado')", []];
+            : ["status NOT IN ('entregado','cancelado','pago_pendiente')", []];
   const orders = await all<Order>(`SELECT * FROM orders WHERE ${where[0]} ORDER BY created_at DESC LIMIT 200`, where[1] as string[]);
   const [items, settings, base] = await Promise.all([itemsForOrders(orders.map((o) => o.id)), getSettings(), siteUrl()]);
 

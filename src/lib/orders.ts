@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { all, get, run, transaction } from "./db";
+import { all, get, transaction } from "./db";
 import { availableToday } from "./format";
 import type { Order, OrderItem, OrderStatus, PaymentMethod, Product } from "./types";
 import { daysLabel, productLabel } from "./types";
@@ -137,6 +137,9 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
       ],
     );
 
+    // Visible en el panel desde ya, salvo que esté esperando el pago en línea
+    await q("UPDATE orders SET confirmed_seq = change_seq WHERE id = ? AND status <> 'pago_pendiente'", [newId]);
+
     for (const { p, qty, note, price } of lines) {
       await q(
         "INSERT INTO order_items (order_id, product_id, name, unit_price, unit_cost, qty, notes) VALUES (?,?,?,?,?,?,?)",
@@ -190,6 +193,9 @@ export async function setOrderStatus(orderId: number, status: OrderStatus, reaso
     if (!prev || prev === status) return;
     if (prev === "cancelado") throw new OrderError("Un pedido cancelado no se puede reabrir.");
     await q("UPDATE orders SET status = ?, change_seq = nextval('orders_change_seq') WHERE id = ?", [status, orderId]);
+    if (prev === "pago_pendiente" && status !== "cancelado") {
+      await q("UPDATE orders SET confirmed_seq = nextval('orders_change_seq') WHERE id = ?", [orderId]);
+    }
     if (status === "cancelado") {
       await q("UPDATE orders SET cancel_reason = ?, cancelled_at = ? WHERE id = ?", [
         reason.trim().slice(0, 200),
@@ -225,12 +231,20 @@ export async function deleteCancelledOrder(orderId: number) {
   });
 }
 
+/** Marca como pagado. Si esperaba el pago en línea, el pedido entra al panel como "Nuevo". */
 export async function markOrderPaid(orderId: number) {
-  await run(
-    `UPDATE orders SET payment_status = 'pagado', paid_at = COALESCE(paid_at, ?), change_seq = nextval('orders_change_seq')
-     WHERE id = ? AND status != 'cancelado' AND payment_status <> 'pagado'`,
-    [new Date().toISOString(), orderId],
-  );
+  await transaction(async (q) => {
+    await q(
+      `UPDATE orders SET payment_status = 'pagado', paid_at = COALESCE(paid_at, ?), change_seq = nextval('orders_change_seq')
+       WHERE id = ? AND status != 'cancelado' AND payment_status <> 'pagado'`,
+      [new Date().toISOString(), orderId],
+    );
+    await q(
+      `UPDATE orders SET status = 'nuevo', confirmed_seq = nextval('orders_change_seq')
+       WHERE id = ? AND status = 'pago_pendiente' AND payment_status = 'pagado'`,
+      [orderId],
+    );
+  });
 }
 
 export function orderCode(id: number) {

@@ -25,7 +25,8 @@ export type Supply = {
   cost_per_unit: number;
 };
 
-export type OrderStatus = "nuevo" | "preparando" | "listo" | "en_camino" | "entregado" | "cancelado";
+/** "pago_pendiente": pedido con tarjeta que aún no se paga; no aparece en el panel hasta confirmarse. */
+export type OrderStatus = "pago_pendiente" | "nuevo" | "preparando" | "listo" | "en_camino" | "entregado" | "cancelado";
 export type PaymentMethod = "efectivo" | "tarjeta" | "transferencia" | "stripe" | "whatsapp";
 
 export type Order = {
@@ -82,6 +83,7 @@ export type Expense = {
 };
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  pago_pendiente: "Esperando pago",
   nuevo: "Nuevo",
   preparando: "Preparando",
   listo: "Listo para entregar",

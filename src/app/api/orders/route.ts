@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import { createOrder, getOrderItems, OrderError, orderCode, setOrderStatus } from "@/lib/orders";
+import { createOrder, OrderError, setOrderStatus } from "@/lib/orders";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { normalizeCp, quoteDelivery } from "@/lib/delivery";
 import { cardLinePrices, processorFee } from "@/lib/fees";
-import { getStripe } from "@/lib/stripe";
+import { createCheckoutSession } from "@/lib/payments";
 import { siteUrl } from "@/lib/url";
-import { run } from "@/lib/db";
 import { onlyDigits } from "@/lib/format";
 
 type Body = {
@@ -82,6 +81,7 @@ export async function POST(req: Request) {
       notes: String(body.notes ?? ""),
       paymentMethod,
       paid: false,
+      status: paymentMethod === "stripe" ? "pago_pendiente" : "nuevo",
       cashGiven: num(body.cashGiven) !== null ? Math.round(num(body.cashGiven)! * 100) : null,
       postalCode,
       // Solo a domicilio con tarjeta en línea: la comisión va incluida en los precios.
@@ -107,56 +107,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ token: order.token });
   }
 
-  // Pago en línea con Stripe Checkout
-  const base = await siteUrl();
+  // Pago en línea con Stripe Checkout: el pedido espera el pago y no aparece en el panel hasta pagarse
   try {
-    const items = await getOrderItems(order.id);
-    const session = await getStripe().checkout.sessions.create({
-      mode: "payment",
-      currency: "mxn",
-      locale: "es",
-      client_reference_id: String(order.id),
-      metadata: { order_id: String(order.id) },
-      line_items: [
-        ...items.map((i) => ({
-          quantity: i.qty,
-          price_data: {
-            currency: "mxn",
-            unit_amount: i.unit_price,
-            product_data: { name: i.notes ? `${i.name} · ${i.notes}` : i.name },
-          },
-        })),
-        ...(order.service_fee > 0
-          ? [
-              {
-                quantity: 1,
-                price_data: {
-                  currency: "mxn",
-                  unit_amount: order.service_fee,
-                  product_data: { name: "Comisión por pago en línea" },
-                },
-              },
-            ]
-          : []),
-        ...(order.delivery_fee > 0
-          ? [
-              {
-                quantity: 1,
-                price_data: { currency: "mxn", unit_amount: order.delivery_fee, product_data: { name: "Envío a domicilio" } },
-              },
-            ]
-          : []),
-      ],
-      payment_intent_data: { description: `${settings.business_name} pedido ${orderCode(order.id)}` },
-      success_url: `${base}/pedido/${order.token}?pago=ok`,
-      cancel_url: `${base}/pedido/${order.token}?pago=cancelado`,
-      expires_at: Math.floor(Date.now() / 1000) + 60 * 60, // 1 hora
-    });
-    await run("UPDATE orders SET stripe_session_id = ? WHERE id = ?", [session.id, order.id]);
-    return NextResponse.json({ token: order.token, checkoutUrl: session.url });
+    const checkoutUrl = await createCheckoutSession(order, settings.business_name, await siteUrl());
+    return NextResponse.json({ token: order.token, checkoutUrl });
   } catch (e) {
     console.error("Stripe error", e);
-    await setOrderStatus(order.id, "cancelado");
+    await setOrderStatus(order.id, "cancelado", "No se pudo iniciar el pago en línea");
     return bad("No se pudo iniciar el pago en línea. Intenta con otra forma de pago.", 502);
   }
 }

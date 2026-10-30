@@ -22,7 +22,7 @@ type Msg = {
   payment?: string;
 };
 
-const PRINTED_KEY = "cafe_last_printed_online";
+const PRINTED_KEY = "cafe_last_printed_online_v2"; // marca = confirmed_seq del último pedido impreso
 
 /**
  * Imprime los pedidos en línea nuevos si este dispositivo lo tiene activado.

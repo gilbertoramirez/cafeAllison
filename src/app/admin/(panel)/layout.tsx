@@ -11,7 +11,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   await requireAdmin();
   const [settings, active] = await Promise.all([
     getSettings(),
-    get<{ n: number }>("SELECT COUNT(*) AS n FROM orders WHERE status NOT IN ('entregado','cancelado') AND channel <> 'mostrador'"),
+    get<{ n: number }>("SELECT COUNT(*) AS n FROM orders WHERE status NOT IN ('entregado','cancelado','pago_pendiente') AND channel <> 'mostrador'"),
   ]);
   const activeOrders = active?.n ?? 0;
   return (

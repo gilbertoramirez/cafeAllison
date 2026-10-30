@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 /**
  * Datos para imprimir tickets.
  *  ?ids=1,2      → esos pedidos
- *  ?after=15     → pedidos en línea con id mayor a 15 (para imprimir comandas automáticamente)
+ *  ?after=15     → pedidos en línea confirmados después de la marca 15 (comandas automáticas)
  */
 export async function GET(req: Request) {
   if (!(await isAdmin())) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -28,8 +28,9 @@ export async function GET(req: Request) {
     // Solo pedidos recientes (últimas 2 h) para no imprimir pedidos viejos al abrir la tableta
     const since = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     orders = await all<Order>(
-      `SELECT * FROM orders WHERE id > ? AND channel <> 'mostrador' AND status <> 'cancelado' AND created_at >= ?
-       ORDER BY id LIMIT 20`,
+      `SELECT * FROM orders WHERE confirmed_seq > ? AND channel <> 'mostrador' AND status NOT IN ('cancelado','pago_pendiente')
+         AND created_at >= ?
+       ORDER BY confirmed_seq LIMIT 20`,
       [after, since],
     );
   }
