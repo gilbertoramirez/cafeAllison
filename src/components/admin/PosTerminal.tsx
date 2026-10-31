@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { posSale } from "@/app/admin/actions";
 import { money } from "@/lib/format";
 import SaleClosedDialog, { type SaleResult } from "./SaleClosedDialog";
@@ -12,23 +12,112 @@ import { loadPrinter, openDrawer, printTickets, shouldOpenDrawer } from "@/lib/p
 type P = { id: number; name: string; category: string; size: string; price: number; maxQty: number; icon: string };
 type Method = "efectivo" | "tarjeta" | "transferencia";
 
+/** Pedido abierto en una pestaña de la caja (se guarda en este dispositivo). */
+type OpenTab = {
+  id: string;
+  n: number;
+  ticket: Record<number, number>;
+  method: Method;
+  cash: string;
+  customer: string;
+  phone: string;
+  useReward: boolean;
+  createdAt: number;
+};
+const TABS_KEY = "cafe_pos_tabs_v1";
+const newTab = (n: number): OpenTab => ({
+  id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+  n,
+  ticket: {},
+  method: "efectivo",
+  cash: "",
+  customer: "",
+  phone: "",
+  useReward: false,
+  createdAt: Date.now(),
+});
+const isEmpty = (t: OpenTab) => Object.keys(t.ticket).length === 0 && !t.customer && !t.phone;
+const tabLabel = (t: OpenTab) => t.customer.trim() || `Pedido ${t.n}`;
+
 export default function PosTerminal({ products }: { products: P[] }) {
-  const [ticket, setTicket] = useState<Record<number, number>>({});
+  // Pedidos abiertos en pestañas: cada uno conserva sus productos y datos
+  const [tabs, setTabs] = useState<OpenTab[]>(() => [newTab(1)]);
+  const [activeId, setActiveId] = useState(tabs[0].id);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(TABS_KEY) || "null") as { tabs: OpenTab[]; active: string } | null;
+      if (saved?.tabs?.length) {
+        setTabs(saved.tabs); // eslint-disable-line react-hooks/set-state-in-effect
+        setActiveId(saved.tabs.some((t) => t.id === saved.active) ? saved.active : saved.tabs[0].id);
+      }
+    } catch {}
+    setHydrated(true);
+  }, []);
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(TABS_KEY, JSON.stringify({ tabs, active: activeId }));
+    } catch {}
+  }, [tabs, activeId, hydrated]);
+  const tabsRef = useRef(tabs); // pestañas al momento de terminar un cobro (que es asíncrono)
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
+  const cur = tabs.find((t) => t.id === activeId) ?? tabs[0];
+  const update = (patch: Partial<OpenTab> | ((t: OpenTab) => Partial<OpenTab>)) =>
+    setTabs((all) => all.map((t) => (t.id === cur.id ? { ...t, ...(typeof patch === "function" ? patch(t) : patch) } : t)));
+  const { ticket, method, cash, customer, phone, useReward } = cur;
+  const setTicket = (fn: Record<number, number> | ((t: Record<number, number>) => Record<number, number>)) =>
+    update((t) => ({ ticket: typeof fn === "function" ? fn(t.ticket) : fn }));
+  const setMethod = (method: Method) => update({ method });
+  const setCash = (cash: string) => update({ cash });
+  const setCustomer = (customer: string) => update({ customer });
+  const setPhone = (phone: string) => update({ phone, useReward: false });
+  const setUseReward = (useReward: boolean) => update({ useReward });
+
+  function switchTo(id: string) {
+    setActiveId(id);
+    setMsg(null);
+  }
+  function openNew() {
+    const empty = tabs.find(isEmpty);
+    if (empty) return switchTo(empty.id);
+    const t = newTab(Math.max(0, ...tabs.map((x) => x.n)) + 1);
+    setTabs((all) => [...all, t]);
+    switchTo(t.id);
+  }
+  function closeTab(id: string) {
+    const t = tabs.find((x) => x.id === id);
+    if (t && !isEmpty(t) && !confirm(`¿Cerrar "${tabLabel(t)}" sin cobrar? Se pierden sus productos.`)) return;
+    const rest = tabs.filter((x) => x.id !== id);
+    const next = rest.length ? rest : [newTab(1)];
+    setTabs(next);
+    if (id === activeId) switchTo(next[next.length - 1].id);
+  }
+  /** Después de cobrar: quita la pestaña cobrada y deja lista una vacía (las demás siguen abiertas). */
+  function finishTab(id: string) {
+    const rest = tabsRef.current.filter((x) => x.id !== id);
+    const empty = rest.find(isEmpty);
+    if (empty) {
+      setTabs(rest);
+      switchTo(empty.id);
+    } else {
+      const t = newTab(rest.length ? Math.max(...rest.map((x) => x.n)) + 1 : 1);
+      setTabs([...rest, t]);
+      switchTo(t.id);
+    }
+  }
+
   const [category, setCategory] = useState("Todo");
   const [search, setSearch] = useState("");
-  const [method, setMethod] = useState<Method>("efectivo");
-  const [cash, setCash] = useState("");
-  const [customer, setCustomer] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [closed, setClosed] = useState<SaleResult | null>(null); // venta recién cerrada
-  // Lealtad: teléfono del cliente, sus sellos y canje de bebida gratis
-  const [phone, setPhone] = useState("");
+  // Lealtad: sellos del teléfono del pedido activo y canje de bebida gratis
   const [loyalty, setLoyalty] = useState<LoyaltyStatus | null>(null);
-  const [useReward, setUseReward] = useState(false);
   const loyaltyPhone = normalizePhone(phone);
   useEffect(() => {
-    setUseReward(false); // eslint-disable-line react-hooks/set-state-in-effect
-    if (!loyaltyPhone) return setLoyalty(null);
+    if (!loyaltyPhone) return setLoyalty(null); // eslint-disable-line react-hooks/set-state-in-effect
     let alive = true;
     getLoyalty(loyaltyPhone)
       .then((st) => alive && setLoyalty(st))
@@ -84,6 +173,7 @@ export default function PosTerminal({ products }: { products: P[] }) {
   }
 
   function charge() {
+    const chargedId = cur.id;
     start(async () => {
       const res = await posSale({
         items: lines.map((l) => ({ productId: l.p.id, qty: l.qty })),
@@ -114,11 +204,7 @@ export default function PosTerminal({ products }: { products: P[] }) {
           }
         }
         setClosed(result);
-        setTicket({});
-        setCash("");
-        setCustomer("");
-        setPhone("");
-        setUseReward(false);
+        finishTab(chargedId);
         setSheet(false);
       } else {
         setMsg({ ok: false, text: res.error });
@@ -130,7 +216,7 @@ export default function PosTerminal({ products }: { products: P[] }) {
 
   const ticketPanel = (
     <>
-        <h2 className="text-lg font-semibold">Ticket</h2>
+        <h2 className="text-lg font-semibold">{tabLabel(cur)}</h2>
         {lines.length === 0 ? (
           <p className="text-sm text-cafe-600">Toca un producto para agregarlo.</p>
         ) : (
@@ -155,7 +241,7 @@ export default function PosTerminal({ products }: { products: P[] }) {
           <span className="tabular-nums">{money(total)}</span>
         </div>
 
-        <input className="input" placeholder="Cliente (opcional)" value={customer} onChange={(e) => setCustomer(e.target.value)} />
+        <input className="input" placeholder="Cliente o mesa (opcional)" value={customer} onChange={(e) => setCustomer(e.target.value)} />
         <input
           className="input"
           type="tel"
@@ -254,6 +340,45 @@ export default function PosTerminal({ products }: { products: P[] }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
       <section className="min-w-0">
+        {/* Pedidos abiertos */}
+        <div className="sticky top-11 z-20 -mx-4 mb-3 flex gap-2 overflow-x-auto bg-cafe-50/95 px-4 py-2 backdrop-blur md:top-0 lg:static lg:mx-0 lg:bg-transparent lg:px-0 lg:py-0 lg:pb-1" role="tablist" aria-label="Pedidos abiertos">
+          {tabs.map((t) => {
+            const on = t.id === cur.id;
+            const items = Object.values(t.ticket).reduce((a, q) => a + q, 0);
+            const sum = Object.entries(t.ticket).reduce(
+              (a, [id, q]) => a + (products.find((x) => x.id === Number(id))?.price ?? 0) * q,
+              0,
+            );
+            return (
+              <div
+                key={t.id}
+                className={`flex shrink-0 items-center rounded-xl text-sm ring-1 ${
+                  on ? "bg-cafe-800 text-white ring-cafe-800" : "bg-white ring-cafe-200"
+                }`}
+              >
+                <button role="tab" aria-selected={on} onClick={() => switchTo(t.id)} className="py-2 pr-1 pl-3 text-left">
+                  <span className="block max-w-36 truncate font-semibold">{tabLabel(t)}</span>
+                  <span className={`block text-xs ${on ? "text-cafe-200" : "text-cafe-500"}`}>
+                    {items ? `${items} prod. · ${money(sum)}` : "Vacío"}
+                  </span>
+                </button>
+                <button
+                  onClick={() => closeTab(t.id)}
+                  aria-label={`Cerrar ${tabLabel(t)}`}
+                  className={`px-2 py-2 text-lg leading-none ${on ? "text-cafe-200" : "text-cafe-400"}`}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+          <button
+            onClick={openNew}
+            className="shrink-0 rounded-xl border border-dashed border-cafe-300 px-3 text-sm font-semibold text-cafe-700"
+          >
+            + Nuevo pedido
+          </button>
+        </div>
         <input
           className="input mb-2 lg:max-w-72"
           type="search"
@@ -314,7 +439,7 @@ export default function PosTerminal({ products }: { products: P[] }) {
           className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 flex items-center justify-between rounded-xl bg-cafe-800 px-4 py-3 text-white shadow-lg lg:hidden"
         >
           <span className="text-sm">
-            🧾 {lines.reduce((a, l) => a + l.qty, 0)} producto(s) · <span className="underline">ver ticket</span>
+            🧾 {tabLabel(cur)} · {lines.reduce((a, l) => a + l.qty, 0)} prod. · <span className="underline">ver ticket</span>
           </span>
           <span className="text-lg font-semibold tabular-nums">Cobrar {money(total)}</span>
         </button>
