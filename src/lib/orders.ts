@@ -216,12 +216,22 @@ export async function itemsForOrders(orderIds: number[]): Promise<Map<number, Or
 /** Cambia el estado; al cancelar regresa el stock al inventario. */
 /** Cambia el estado. Al cancelar regresa el stock y guarda motivo y fecha. */
 export async function setOrderStatus(orderId: number, status: OrderStatus, reason = "") {
+  let paidNow = false;
   await transaction(async (q) => {
     const [row] = await q<{ status: OrderStatus }>("SELECT status FROM orders WHERE id = ? FOR UPDATE", [orderId]);
     const prev = row?.status;
     if (!prev || prev === status) return;
     if (prev === "cancelado") throw new OrderError("Un pedido cancelado no se puede reabrir.");
     await q("UPDATE orders SET status = ?, change_seq = nextval('orders_change_seq') WHERE id = ?", [status, orderId]);
+    // Entregado = ya se cobró: los pedidos que se pagan al recibir (efectivo/WhatsApp) quedan pagados
+    if (status === "entregado") {
+      const paid = await q<{ id: number }>(
+        `UPDATE orders SET payment_status = 'pagado', paid_at = COALESCE(paid_at, ?)
+         WHERE id = ? AND payment_status <> 'pagado' AND payment_method <> 'stripe' RETURNING id`,
+        [new Date().toISOString(), orderId],
+      );
+      paidNow = paid.length > 0;
+    }
     if (prev === "pago_pendiente" && status !== "cancelado") {
       await q("UPDATE orders SET confirmed_seq = nextval('orders_change_seq') WHERE id = ?", [orderId]);
     }
@@ -246,6 +256,7 @@ export async function setOrderStatus(orderId: number, status: OrderStatus, reaso
       }
     }
   });
+  if (paidNow) await awardStamp(orderId).catch((e) => console.error("lealtad", e));
 }
 
 /** Borra por completo un pedido que ya fue cancelado (pruebas o errores de captura). */

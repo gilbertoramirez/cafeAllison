@@ -16,6 +16,7 @@ export async function loyaltyStatus(phoneInput: string): Promise<LoyaltyStatus |
   const phone = normalizePhone(phoneInput);
   const cfg = await loyaltySettings();
   if (!phone || !cfg.enabled) return null;
+  await ensureBackfill();
   const now = nowIso();
   await run("UPDATE loyalty_rewards SET status = 'vencido' WHERE phone = ? AND status = 'disponible' AND expires_at <= ?", [
     phone,
@@ -36,26 +37,53 @@ export async function loyaltyStatus(phoneInput: string): Promise<LoyaltyStatus |
  * Da un sello por un pedido pagado (máximo 1 por día y teléfono, compra mínima configurable).
  * Idempotente. Al juntar los sellos necesarios crea la bebida gratis.
  */
-export async function awardStamp(orderId: number) {
+export async function awardStamp(orderId: number, fromBackfill = false) {
   const cfg = await loyaltySettings();
   if (!cfg.enabled) return;
-  const order = await get<{ phone: string; subtotal: number; payment_status: string; status: string }>(
-    "SELECT phone, subtotal, payment_status, status FROM orders WHERE id = ?",
+  if (!fromBackfill) await ensureBackfill();
+  const order = await get<{ phone: string; subtotal: number; payment_status: string; status: string; created_at: string }>(
+    "SELECT phone, subtotal, payment_status, status, created_at FROM orders WHERE id = ?",
     [orderId],
   );
   const phone = normalizePhone(order?.phone ?? "");
   if (!order || !phone || order.payment_status !== "pagado" || order.status === "cancelado") return;
   if (order.subtotal < cfg.minPurchase) return;
-  const today = localDate();
-  const expires = new Date(addMonths(today, cfg.stampMonths) + "T23:59:59Z").toISOString();
+  // El sello cuenta para el día en que se hizo la compra (aunque se pague o entregue después)
+  const day = localDate(new Date(order.created_at));
+  const expires = new Date(addMonths(day, cfg.stampMonths) + "T23:59:59Z").toISOString();
+  if (expires <= nowIso()) return;
   await transaction(async (q) => {
     await q(
       `INSERT INTO loyalty_stamps (phone, order_id, stamp_date, expires_at) VALUES (?,?,?,?)
        ON CONFLICT DO NOTHING`,
-      [phone, orderId, today, expires],
+      [phone, orderId, day, expires],
     );
     await maybeCreateReward(q, phone, cfg);
   });
+}
+
+/**
+ * Una sola vez: da los sellos de pedidos pagados que no los recibieron
+ * (p. ej. pedidos en efectivo que se entregaron sin tocar "Marcar pagado").
+ */
+let backfill: Promise<void> | null = null;
+function ensureBackfill() {
+  backfill ??= (async () => {
+    const done = await get<{ value: string }>("SELECT value FROM settings WHERE key = 'loyalty_backfill_v1'");
+    if (done) return;
+    const orders = await all<{ id: number }>(
+      `SELECT o.id FROM orders o
+       WHERE o.payment_status = 'pagado' AND o.status <> 'cancelado' AND o.phone <> ''
+         AND NOT EXISTS (SELECT 1 FROM loyalty_stamps s WHERE s.order_id = o.id)
+       ORDER BY o.created_at`,
+    );
+    for (const o of orders) await awardStamp(o.id, true);
+    await run("INSERT INTO settings (key, value) VALUES ('loyalty_backfill_v1', '1') ON CONFLICT (key) DO NOTHING");
+  })().catch((e) => {
+    backfill = null; // se reintenta en la siguiente consulta
+    console.error("lealtad: sellos pendientes", e);
+  });
+  return backfill;
 }
 
 async function maybeCreateReward(q: Query, phone: string, cfg: LoyaltySettings) {

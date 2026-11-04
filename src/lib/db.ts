@@ -399,6 +399,15 @@ async function init(b: Backend) {
       await q("UPDATE orders SET processing_fee = service_fee WHERE processing_fee = 0 AND service_fee > 0");
       await q("INSERT INTO settings (key, value) VALUES ('online_fee_v2', '1') ON CONFLICT (key) DO NOTHING");
     }
+    // Una sola vez: pedidos de pago al recibir que ya se entregaron cuentan como pagados
+    const [paidMig] = await q<{ value: string }>("SELECT value FROM settings WHERE key = 'paid_on_delivery_v1'");
+    if (!paidMig) {
+      await q(
+        `UPDATE orders SET payment_status = 'pagado', paid_at = COALESCE(paid_at, created_at)
+         WHERE status = 'entregado' AND payment_status <> 'pagado' AND payment_method <> 'stripe'`,
+      );
+      await q("INSERT INTO settings (key, value) VALUES ('paid_on_delivery_v1', '1') ON CONFLICT (key) DO NOTHING");
+    }
     for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) {
       await q("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING", [k, v]);
     }
