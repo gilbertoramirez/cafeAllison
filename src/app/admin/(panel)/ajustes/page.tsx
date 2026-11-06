@@ -299,7 +299,7 @@ export default async function SettingsPage() {
             Toca <b>+</b>, escribe exactamente el mismo nombre de tema que
             aparece abajo y suscríbete.
           </li>
-          <li>Guarda aquí y toca “Enviar prueba”.</li>
+          <li>Toca “Enviar prueba”.</li>
         </ol>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Nombre del tema">
@@ -358,6 +358,14 @@ export default async function SettingsPage() {
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <button className="btn-primary">Guardar avisos</button>
+          {s.ntfy.topic && (
+            <a
+              href={`ntfy://${s.ntfy.server.replace(/^https?:\/\//, "")}/${s.ntfy.topic}`}
+              className="btn-secondary"
+            >
+              📲 Suscribirme en la app ntfy
+            </a>
+          )}
           {s.ntfy.topic && <NtfyTestButton />}
         </div>
       </form>
