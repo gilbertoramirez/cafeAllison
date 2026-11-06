@@ -12,7 +12,19 @@ export default function NtfyTestButton() {
         type="button"
         className="btn-secondary"
         disabled={pending}
-        onClick={() => start(async () => setRes(await testNtfy()))}
+        onClick={() =>
+          start(async () => {
+            setRes(null);
+            try {
+              setRes(await testNtfy());
+            } catch (e) {
+              setRes({
+                ok: false,
+                text: `No se pudo enviar: ${e instanceof Error ? e.message : String(e)}`,
+              });
+            }
+          })
+        }
       >
         {pending ? "Enviando…" : "🔔 Enviar prueba"}
       </button>

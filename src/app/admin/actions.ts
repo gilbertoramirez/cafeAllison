@@ -2,10 +2,22 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { checkPassword, endSession, passwordConfigured, requireAdmin, startSession } from "@/lib/auth";
+import {
+  checkPassword,
+  endSession,
+  passwordConfigured,
+  requireAdmin,
+  startSession,
+} from "@/lib/auth";
 import { get, run, transaction } from "@/lib/db";
 import { addDays, addMonths, localDate, toCents } from "@/lib/format";
-import { createOrder, deleteCancelledOrder, markOrderPaid, OrderError, setOrderStatus } from "@/lib/orders";
+import {
+  createOrder,
+  deleteCancelledOrder,
+  markOrderPaid,
+  OrderError,
+  setOrderStatus,
+} from "@/lib/orders";
 import { getSettings, setSetting } from "@/lib/settings";
 import { sendNtfy } from "@/lib/notify";
 import { parseCps } from "@/lib/delivery";
@@ -14,7 +26,11 @@ import { loyaltyStatus } from "@/lib/loyalty";
 import { ticketsByIds } from "@/lib/tickets-server";
 import type { TicketData } from "@/lib/ticket";
 import type { Expense, OrderStatus, PaymentMethod } from "@/lib/types";
-import { EXPENSE_CATEGORIES, ORDER_STATUS_LABEL, productLabel } from "@/lib/types";
+import {
+  EXPENSE_CATEGORIES,
+  ORDER_STATUS_LABEL,
+  productLabel,
+} from "@/lib/types";
 
 function done() {
   revalidatePath("/", "layout");
@@ -32,7 +48,10 @@ const num = (f: FormData, k: string) => {
 
 // ---------- Sesión ----------
 
-export async function login(_prev: string | null, formData: FormData): Promise<string | null> {
+export async function login(
+  _prev: string | null,
+  formData: FormData,
+): Promise<string | null> {
   if (!passwordConfigured()) {
     return "Falta configurar ADMIN_PASSWORD en las variables de entorno de este despliegue (y volver a desplegar).";
   }
@@ -58,10 +77,19 @@ export async function posSale(input: {
   /** canjear la bebida gratis del teléfono (en caja la verifica quien atiende) */
   useReward?: boolean;
 }): Promise<
-  { ok: true; orderId: number; total: number; change: number; ticket: TicketData | null } | { ok: false; error: string }
+  | {
+      ok: true;
+      orderId: number;
+      total: number;
+      change: number;
+      ticket: TicketData | null;
+    }
+  | { ok: false; error: string }
 > {
   await requireAdmin();
-  const pm: PaymentMethod = ["efectivo", "tarjeta", "transferencia"].includes(input.paymentMethod)
+  const pm: PaymentMethod = ["efectivo", "tarjeta", "transferencia"].includes(
+    input.paymentMethod,
+  )
     ? input.paymentMethod
     : "efectivo";
   try {
@@ -85,7 +113,10 @@ export async function posSale(input: {
       ok: true,
       orderId: order.id,
       total: order.total,
-      change: pm === "efectivo" && input.cashGiven ? input.cashGiven - order.total : 0,
+      change:
+        pm === "efectivo" && input.cashGiven
+          ? input.cashGiven - order.total
+          : 0,
       ticket: ticket ?? null,
     };
   } catch (e) {
@@ -104,9 +135,13 @@ export async function updateOrderStatus(orderId: number, status: OrderStatus) {
 }
 
 /** Cancelar una venta o pedido (también los ya entregados, p. ej. ventas de caja). */
-export async function cancelOrder(orderId: number, reason: string): Promise<{ ok: boolean; error?: string }> {
+export async function cancelOrder(
+  orderId: number,
+  reason: string,
+): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin();
-  if (!reason.trim()) return { ok: false, error: "Escribe el motivo de la cancelación." };
+  if (!reason.trim())
+    return { ok: false, error: "Escribe el motivo de la cancelación." };
   try {
     await setOrderStatus(orderId, "cancelado", reason);
     done();
@@ -118,7 +153,9 @@ export async function cancelOrder(orderId: number, reason: string): Promise<{ ok
 }
 
 /** Eliminar definitivamente (solo ventas ya canceladas). */
-export async function deleteOrder(orderId: number): Promise<{ ok: boolean; error?: string }> {
+export async function deleteOrder(
+  orderId: number,
+): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin();
   try {
     await deleteCancelledOrder(orderId);
@@ -187,20 +224,35 @@ export async function toggleProduct(id: number) {
 // ---------- Inventario ----------
 
 /** Campo "item" con formato "product:3" o "supply:7". */
-function parseItem(formData: FormData): { type: "product" | "supply"; id: number } {
+function parseItem(formData: FormData): {
+  type: "product" | "supply";
+  id: number;
+} {
   const [t, i] = str(formData, "item").split(":");
-  return { type: t === "supply" ? "supply" : "product", id: Math.round(Number(i)) || 0 };
+  return {
+    type: t === "supply" ? "supply" : "product",
+    id: Math.round(Number(i)) || 0,
+  };
 }
 
-async function addExpense(e: { date: string; category: string; description: string; amount: number; status: string }) {
-  await run("INSERT INTO expenses (date, category, description, amount, status, paid_at) VALUES (?,?,?,?,?,?)", [
-    e.date,
-    e.category,
-    e.description,
-    e.amount,
-    e.status,
-    e.status === "pagado" ? new Date().toISOString() : null,
-  ]);
+async function addExpense(e: {
+  date: string;
+  category: string;
+  description: string;
+  amount: number;
+  status: string;
+}) {
+  await run(
+    "INSERT INTO expenses (date, category, description, amount, status, paid_at) VALUES (?,?,?,?,?,?)",
+    [
+      e.date,
+      e.category,
+      e.description,
+      e.amount,
+      e.status,
+      e.status === "pagado" ? new Date().toISOString() : null,
+    ],
+  );
 }
 
 /** Entrada de mercancía. Opcionalmente registra el gasto y actualiza el costo unitario. */
@@ -212,23 +264,38 @@ export async function restock(formData: FormData) {
   if (!id || qty <= 0) return;
 
   const table = type === "product" ? "products" : "supplies";
-  const item = await get<{ name: string; size?: string }>(`SELECT * FROM ${table} WHERE id = ?`, [id]);
+  const item = await get<{ name: string; size?: string }>(
+    `SELECT * FROM ${table} WHERE id = ?`,
+    [id],
+  );
   if (!item) return;
 
   await transaction(async (q) => {
-    if (type === "product") await q("UPDATE products SET stock = stock + ? WHERE id = ?", [Math.round(qty), id]);
+    if (type === "product")
+      await q("UPDATE products SET stock = stock + ? WHERE id = ?", [
+        Math.round(qty),
+        id,
+      ]);
     else await q("UPDATE supplies SET qty = qty + ? WHERE id = ?", [qty, id]);
-    await q("INSERT INTO inventory_movements (item_type, item_id, change, reason, note) VALUES (?,?,?,?,?)", [
-      type,
-      id,
-      type === "product" ? Math.round(qty) : qty,
-      "resurtido",
-      str(formData, "note"),
-    ]);
+    await q(
+      "INSERT INTO inventory_movements (item_type, item_id, change, reason, note) VALUES (?,?,?,?,?)",
+      [
+        type,
+        id,
+        type === "product" ? Math.round(qty) : qty,
+        "resurtido",
+        str(formData, "note"),
+      ],
+    );
     if (totalCost > 0 && formData.get("update_cost")) {
       const unit = Math.round(totalCost / qty);
-      if (type === "product") await q("UPDATE products SET cost = ? WHERE id = ?", [unit, id]);
-      else await q("UPDATE supplies SET cost_per_unit = ? WHERE id = ?", [unit, id]);
+      if (type === "product")
+        await q("UPDATE products SET cost = ? WHERE id = ?", [unit, id]);
+      else
+        await q("UPDATE supplies SET cost_per_unit = ? WHERE id = ?", [
+          unit,
+          id,
+        ]);
     }
   });
 
@@ -252,22 +319,25 @@ export async function adjustStock(formData: FormData) {
   if (!id || newQty < 0) return;
   const row =
     type === "product"
-      ? await get<{ q: number }>("SELECT stock AS q FROM products WHERE id = ?", [id])
-      : await get<{ q: number }>("SELECT qty AS q FROM supplies WHERE id = ?", [id]);
+      ? await get<{ q: number }>(
+          "SELECT stock AS q FROM products WHERE id = ?",
+          [id],
+        )
+      : await get<{ q: number }>("SELECT qty AS q FROM supplies WHERE id = ?", [
+          id,
+        ]);
   if (!row) return;
   const target = type === "product" ? Math.round(newQty) : newQty;
   const change = target - Number(row.q);
   if (change === 0) return;
   await transaction(async (q) => {
-    if (type === "product") await q("UPDATE products SET stock = ? WHERE id = ?", [target, id]);
+    if (type === "product")
+      await q("UPDATE products SET stock = ? WHERE id = ?", [target, id]);
     else await q("UPDATE supplies SET qty = ? WHERE id = ?", [target, id]);
-    await q("INSERT INTO inventory_movements (item_type, item_id, change, reason, note) VALUES (?,?,?,?,?)", [
-      type,
-      id,
-      change,
-      "ajuste",
-      str(formData, "note"),
-    ]);
+    await q(
+      "INSERT INTO inventory_movements (item_type, item_id, change, reason, note) VALUES (?,?,?,?,?)",
+      [type, id, change, "ajuste", str(formData, "note")],
+    );
   });
   done();
 }
@@ -281,15 +351,15 @@ export async function saveSupply(formData: FormData) {
   const minQty = num(formData, "min_qty");
   const cpu = toCents(formData.get("cost_per_unit"));
   if (id) {
-    await run("UPDATE supplies SET name=?, unit=?, min_qty=?, cost_per_unit=? WHERE id=?", [name, unit, minQty, cpu, id]);
+    await run(
+      "UPDATE supplies SET name=?, unit=?, min_qty=?, cost_per_unit=? WHERE id=?",
+      [name, unit, minQty, cpu, id],
+    );
   } else {
-    await run("INSERT INTO supplies (name, unit, qty, min_qty, cost_per_unit) VALUES (?,?,?,?,?)", [
-      name,
-      unit,
-      num(formData, "qty"),
-      minQty,
-      cpu,
-    ]);
+    await run(
+      "INSERT INTO supplies (name, unit, qty, min_qty, cost_per_unit) VALUES (?,?,?,?,?)",
+      [name, unit, num(formData, "qty"), minQty, cpu],
+    );
   }
   done();
 }
@@ -309,45 +379,54 @@ export async function saveExpense(formData: FormData) {
   const category = str(formData, "category");
   if (amount <= 0 || !(category in EXPENSE_CATEGORIES)) return;
   const date = str(formData, "date") || localDate();
-  const status = str(formData, "status") === "pendiente" ? "pendiente" : "pagado";
+  const status =
+    str(formData, "status") === "pendiente" ? "pendiente" : "pagado";
   const r = str(formData, "recurring");
-  const recurring: Expense["recurring"] = r === "monthly" || r === "weekly" ? r : "none";
+  const recurring: Expense["recurring"] =
+    r === "monthly" || r === "weekly" ? r : "none";
   const description = str(formData, "description");
   if (id) {
-    await run("UPDATE expenses SET date=?, category=?, description=?, amount=?, status=?, recurring=? WHERE id=?", [
-      date,
-      category,
-      description,
-      amount,
-      status,
-      recurring,
-      id,
-    ]);
+    await run(
+      "UPDATE expenses SET date=?, category=?, description=?, amount=?, status=?, recurring=? WHERE id=?",
+      [date, category, description, amount, status, recurring, id],
+    );
   } else {
     await run(
       "INSERT INTO expenses (date, category, description, amount, status, recurring, paid_at) VALUES (?,?,?,?,?,?,?)",
-      [date, category, description, amount, status, recurring, status === "pagado" ? new Date().toISOString() : null],
+      [
+        date,
+        category,
+        description,
+        amount,
+        status,
+        recurring,
+        status === "pagado" ? new Date().toISOString() : null,
+      ],
     );
-    if (status === "pagado" && recurring !== "none") await scheduleNext({ date, category, description, amount, recurring });
+    if (status === "pagado" && recurring !== "none")
+      await scheduleNext({ date, category, description, amount, recurring });
   }
   done();
 }
 
 /** Para gastos fijos (renta, luz…): al pagarlos se agenda el siguiente como pendiente. */
-async function scheduleNext(e: Pick<Expense, "date" | "category" | "description" | "amount" | "recurring">) {
-  const next = e.recurring === "monthly" ? addMonths(e.date, 1) : addDays(e.date, 7);
+async function scheduleNext(
+  e: Pick<
+    Expense,
+    "date" | "category" | "description" | "amount" | "recurring"
+  >,
+) {
+  const next =
+    e.recurring === "monthly" ? addMonths(e.date, 1) : addDays(e.date, 7);
   const exists = await get(
     "SELECT id FROM expenses WHERE category = ? AND description = ? AND date = ? AND recurring = ?",
     [e.category, e.description, next, e.recurring],
   );
   if (!exists) {
-    await run("INSERT INTO expenses (date, category, description, amount, status, recurring) VALUES (?,?,?,?, 'pendiente', ?)", [
-      next,
-      e.category,
-      e.description,
-      e.amount,
-      e.recurring,
-    ]);
+    await run(
+      "INSERT INTO expenses (date, category, description, amount, status, recurring) VALUES (?,?,?,?, 'pendiente', ?)",
+      [next, e.category, e.description, e.amount, e.recurring],
+    );
   }
 }
 
@@ -355,7 +434,10 @@ export async function payExpense(id: number) {
   await requireAdmin();
   const e = await get<Expense>("SELECT * FROM expenses WHERE id = ?", [id]);
   if (!e || e.status === "pagado") return;
-  await run("UPDATE expenses SET status = 'pagado', paid_at = ? WHERE id = ?", [new Date().toISOString(), id]);
+  await run("UPDATE expenses SET status = 'pagado', paid_at = ? WHERE id = ?", [
+    new Date().toISOString(),
+    id,
+  ]);
   if (e.recurring !== "none") await scheduleNext(e);
   done();
 }
@@ -370,15 +452,33 @@ export async function deleteExpense(id: number) {
 
 export async function saveSettings(formData: FormData) {
   await requireAdmin();
-  await setSetting("business_name", str(formData, "business_name") || "Mi cafetería");
-  await setSetting("whatsapp_number", str(formData, "whatsapp_number").replace(/[^\d+]/g, ""));
+  await setSetting(
+    "business_name",
+    str(formData, "business_name") || "Mi cafetería",
+  );
+  await setSetting(
+    "whatsapp_number",
+    str(formData, "whatsapp_number").replace(/[^\d+]/g, ""),
+  );
   await setSetting("address", str(formData, "address"));
   await setSetting("hours", str(formData, "hours"));
-  await setSetting("delivery_enabled", formData.get("delivery_enabled") ? "1" : "0");
+  await setSetting(
+    "delivery_enabled",
+    formData.get("delivery_enabled") ? "1" : "0",
+  );
   await setSetting("store_open", formData.get("store_open") ? "1" : "0");
-  await setSetting("delivery_fee", String(toCents(formData.get("delivery_fee"))));
-  await setSetting("min_delivery_order", String(toCents(formData.get("min_delivery_order"))));
-  await setSetting("free_delivery_from", String(toCents(formData.get("free_delivery_from"))));
+  await setSetting(
+    "delivery_fee",
+    String(toCents(formData.get("delivery_fee"))),
+  );
+  await setSetting(
+    "min_delivery_order",
+    String(toCents(formData.get("min_delivery_order"))),
+  );
+  await setSetting(
+    "free_delivery_from",
+    String(toCents(formData.get("free_delivery_from"))),
+  );
   done();
 }
 
@@ -392,9 +492,15 @@ export async function saveZone(formData: FormData) {
   const fee = toCents(formData.get("fee"));
   if (!name || !cps) return;
   if (id) {
-    await run("UPDATE delivery_zones SET name = ?, postal_codes = ?, fee = ? WHERE id = ?", [name, cps, fee, id]);
+    await run(
+      "UPDATE delivery_zones SET name = ?, postal_codes = ?, fee = ? WHERE id = ?",
+      [name, cps, fee, id],
+    );
   } else {
-    await run("INSERT INTO delivery_zones (name, postal_codes, fee) VALUES (?, ?, ?)", [name, cps, fee]);
+    await run(
+      "INSERT INTO delivery_zones (name, postal_codes, fee) VALUES (?, ?, ?)",
+      [name, cps, fee],
+    );
   }
   done();
 }
@@ -409,7 +515,8 @@ export async function deleteZone(id: number) {
 
 export async function saveOnlineFee(formData: FormData) {
   await requireAdmin();
-  const clamp = (n: number, max: number) => String(Math.min(Math.max(Number.isFinite(n) ? n : 0, 0), max));
+  const clamp = (n: number, max: number) =>
+    String(Math.min(Math.max(Number.isFinite(n) ? n : 0, 0), max));
   await setSetting("online_fee_enabled", formData.get("enabled") ? "1" : "0");
   await setSetting("online_fee_percent", clamp(num(formData, "percent"), 20));
   await setSetting("online_fee_fixed", String(toCents(formData.get("fixed"))));
@@ -428,19 +535,37 @@ export async function getLoyalty(phone: string): Promise<LoyaltyStatus | null> {
 export async function saveLoyaltySettings(formData: FormData) {
   await requireAdmin();
   await setSetting("loyalty_enabled", formData.get("enabled") ? "1" : "0");
-  await setSetting("loyalty_stamps_needed", String(Math.min(Math.max(int(formData, "needed"), 1), 50)));
-  await setSetting("loyalty_min_purchase", String(toCents(formData.get("min"))));
-  await setSetting("loyalty_stamp_months", String(Math.min(Math.max(int(formData, "months"), 1), 24)));
-  await setSetting("loyalty_reward_days", String(Math.min(Math.max(int(formData, "days"), 1), 365)));
+  await setSetting(
+    "loyalty_stamps_needed",
+    String(Math.min(Math.max(int(formData, "needed"), 1), 50)),
+  );
+  await setSetting(
+    "loyalty_min_purchase",
+    String(toCents(formData.get("min"))),
+  );
+  await setSetting(
+    "loyalty_stamp_months",
+    String(Math.min(Math.max(int(formData, "months"), 1), 24)),
+  );
+  await setSetting(
+    "loyalty_reward_days",
+    String(Math.min(Math.max(int(formData, "days"), 1), 365)),
+  );
   done();
 }
 
 export async function saveNtfySettings(formData: FormData) {
   await requireAdmin();
   const topic = String(formData.get("topic") ?? "").trim();
-  if (topic && !/^[\w-]{1,64}$/.test(topic)) throw new Error("El tema solo puede tener letras, números, - y _ (máx. 64).");
-  const server = String(formData.get("server") ?? "").trim().replace(/\/$/, "");
-  if (server && !/^https?:\/\/[^\s/]+$/.test(server)) throw new Error("El servidor debe ser una dirección como https://ntfy.sh");
+  if (topic && !/^[\w-]{1,64}$/.test(topic))
+    throw new Error(
+      "El tema solo puede tener letras, números, - y _ (máx. 64).",
+    );
+  const server = String(formData.get("server") ?? "")
+    .trim()
+    .replace(/\/$/, "");
+  if (server && !/^https?:\/\/[^\s/]+$/.test(server))
+    throw new Error("El servidor debe ser una dirección como https://ntfy.sh");
   await setSetting("ntfy_topic", topic);
   await setSetting("ntfy_server", server);
   await setSetting("ntfy_new", formData.get("new") ? "1" : "0");
@@ -452,12 +577,19 @@ export async function saveNtfySettings(formData: FormData) {
 export async function testNtfy(): Promise<{ ok: boolean; text: string }> {
   await requireAdmin();
   const { ntfy, business_name } = await getSettings();
-  if (!ntfy.topic) return { ok: false, text: "Primero guarda el nombre del tema." };
+  if (!ntfy.topic)
+    return { ok: false, text: "Primero guarda el nombre del tema." };
   const err = await sendNtfy(ntfy, {
     title: `✅ ${business_name}: avisos activados`,
     message: "Así te llegarán los pedidos nuevos y sus cambios.",
     tags: ["white_check_mark"],
     priority: 4,
   });
-  return err ? { ok: false, text: `No se pudo enviar: ${err}` } : { ok: true, text: "Enviado. Revisa tu celular." };
+  const where = `${ntfy.server.replace(/^https?:\/\//, "")}/${ntfy.topic}`;
+  return err
+    ? { ok: false, text: `No se pudo enviar a ${where}: ${err}` }
+    : {
+        ok: true,
+        text: `✓ Enviado al tema ${where}. Si no te llegó, revisa que la app ntfy esté suscrita a ese mismo tema.`,
+      };
 }
