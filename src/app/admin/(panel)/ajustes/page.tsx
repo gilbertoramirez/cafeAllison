@@ -3,7 +3,16 @@ import { centsToInput, money } from "@/lib/format";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { parseCps } from "@/lib/delivery";
 import { onlinePrice } from "@/lib/fees";
-import { deleteZone, saveLoyaltySettings, saveOnlineFee, saveSettings, saveZone } from "../../actions";
+import { randomBytes } from "node:crypto";
+import {
+  deleteZone,
+  saveLoyaltySettings,
+  saveNtfySettings,
+  saveOnlineFee,
+  saveSettings,
+  saveZone,
+} from "../../actions";
+import NtfyTestButton from "@/components/admin/NtfyTestButton";
 import { smsEnabled } from "@/lib/sms";
 import PrinterSettingsCard from "@/components/admin/PrinterSettingsCard";
 
@@ -15,10 +24,23 @@ export default async function SettingsPage() {
       <PageTitle>Ajustes</PageTitle>
       <form action={saveSettings} className="card grid gap-4 sm:grid-cols-2">
         <Field label="Nombre del negocio" className="sm:col-span-2">
-          <input name="business_name" className="input" defaultValue={s.business_name} required />
+          <input
+            name="business_name"
+            className="input"
+            defaultValue={s.business_name}
+            required
+          />
         </Field>
-        <Field label="WhatsApp del negocio" hint="10 dígitos, ej. 5512345678. Los pedidos por WhatsApp llegan aquí.">
-          <input name="whatsapp_number" className="input" defaultValue={s.whatsapp_number} inputMode="tel" />
+        <Field
+          label="WhatsApp del negocio"
+          hint="10 dígitos, ej. 5512345678. Los pedidos por WhatsApp llegan aquí."
+        >
+          <input
+            name="whatsapp_number"
+            className="input"
+            defaultValue={s.whatsapp_number}
+            inputMode="tel"
+          />
         </Field>
         <Field label="Horario">
           <input name="hours" className="input" defaultValue={s.hours} />
@@ -28,11 +50,25 @@ export default async function SettingsPage() {
         </Field>
         <Field
           label="Costo de envío fijo ($)"
-          hint={zones.length ? "No se usa: el envío se calcula por zonas (abajo)." : "Se usa mientras no configures zonas por código postal."}
+          hint={
+            zones.length
+              ? "No se usa: el envío se calcula por zonas (abajo)."
+              : "Se usa mientras no configures zonas por código postal."
+          }
         >
-          <input name="delivery_fee" type="number" step="0.01" min="0" className="input" defaultValue={centsToInput(s.delivery_fee)} />
+          <input
+            name="delivery_fee"
+            type="number"
+            step="0.01"
+            min="0"
+            className="input"
+            defaultValue={centsToInput(s.delivery_fee)}
+          />
         </Field>
-        <Field label="Envío gratis desde ($)" hint="Subtotal a partir del cual no se cobra envío. 0 = nunca gratis.">
+        <Field
+          label="Envío gratis desde ($)"
+          hint="Subtotal a partir del cual no se cobra envío. 0 = nunca gratis."
+        >
           <input
             name="free_delivery_from"
             type="number"
@@ -53,10 +89,20 @@ export default async function SettingsPage() {
           />
         </Field>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="store_open" defaultChecked={s.store_open} /> Recibir pedidos en línea
+          <input
+            type="checkbox"
+            name="store_open"
+            defaultChecked={s.store_open}
+          />{" "}
+          Recibir pedidos en línea
         </label>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="delivery_enabled" defaultChecked={s.delivery_enabled} /> Ofrecer entrega a domicilio
+          <input
+            type="checkbox"
+            name="delivery_enabled"
+            defaultChecked={s.delivery_enabled}
+          />{" "}
+          Ofrecer entrega a domicilio
         </label>
         <div className="sm:col-span-2">
           <button className="btn-primary">Guardar ajustes</button>
@@ -67,43 +113,100 @@ export default async function SettingsPage() {
         <div>
           <h2 className="font-semibold">🛵 Zonas de envío por código postal</h2>
           <p className="text-sm text-cafe-600">
-            El cliente escribe su código postal y se cobra el envío de su zona. Si su código postal no está en ninguna zona, no
-            se permite pedir a domicilio (solo recoger).
-            {zones.length === 0 && " Mientras no agregues zonas, se cobra el costo de envío fijo a cualquier dirección."}
+            El cliente escribe su código postal y se cobra el envío de su zona.
+            Si su código postal no está en ninguna zona, no se permite pedir a
+            domicilio (solo recoger).
+            {zones.length === 0 &&
+              " Mientras no agregues zonas, se cobra el costo de envío fijo a cualquier dirección."}
           </p>
         </div>
 
         {zones.map((z) => (
-          <form key={z.id} action={saveZone} className="grid gap-2 rounded-lg border border-cafe-100 p-3 sm:grid-cols-[1fr_8rem]">
+          <form
+            key={z.id}
+            action={saveZone}
+            className="grid gap-2 rounded-lg border border-cafe-100 p-3 sm:grid-cols-[1fr_8rem]"
+          >
             <input type="hidden" name="id" value={z.id} />
             <Field label="Nombre de la zona">
-              <input name="name" className="input" defaultValue={z.name} required />
+              <input
+                name="name"
+                className="input"
+                defaultValue={z.name}
+                required
+              />
             </Field>
             <Field label="Envío ($)">
-              <input name="fee" type="number" step="0.01" min="0" className="input" defaultValue={centsToInput(z.fee)} />
+              <input
+                name="fee"
+                type="number"
+                step="0.01"
+                min="0"
+                className="input"
+                defaultValue={centsToInput(z.fee)}
+              />
             </Field>
-            <Field label={`Códigos postales (${parseCps(z.postal_codes).length})`} className="sm:col-span-2">
-              <textarea name="postal_codes" rows={2} className="input font-mono" defaultValue={z.postal_codes} required />
+            <Field
+              label={`Códigos postales (${parseCps(z.postal_codes).length})`}
+              className="sm:col-span-2"
+            >
+              <textarea
+                name="postal_codes"
+                rows={2}
+                className="input font-mono"
+                defaultValue={z.postal_codes}
+                required
+              />
             </Field>
             <div className="flex gap-3 sm:col-span-2">
               <button className="btn-secondary">Guardar</button>
-              <button formAction={deleteZone.bind(null, z.id)} formNoValidate className="text-sm text-red-700 underline">
+              <button
+                formAction={deleteZone.bind(null, z.id)}
+                formNoValidate
+                className="text-sm text-red-700 underline"
+              >
                 Eliminar zona
               </button>
             </div>
           </form>
         ))}
 
-        <form action={saveZone} className="grid gap-2 rounded-lg border border-dashed border-cafe-300 p-3 sm:grid-cols-[1fr_8rem]">
+        <form
+          action={saveZone}
+          className="grid gap-2 rounded-lg border border-dashed border-cafe-300 p-3 sm:grid-cols-[1fr_8rem]"
+        >
           <p className="text-sm font-medium sm:col-span-2">+ Nueva zona</p>
           <Field label="Nombre de la zona">
-            <input name="name" className="input" placeholder="Zona 1 · Centro" required />
+            <input
+              name="name"
+              className="input"
+              placeholder="Zona 1 · Centro"
+              required
+            />
           </Field>
           <Field label="Envío ($)">
-            <input name="fee" type="number" step="0.01" min="0" className="input" placeholder="25" required />
+            <input
+              name="fee"
+              type="number"
+              step="0.01"
+              min="0"
+              className="input"
+              placeholder="25"
+              required
+            />
           </Field>
-          <Field label="Códigos postales" hint="Sepáralos con comas o espacios." className="sm:col-span-2">
-            <textarea name="postal_codes" rows={2} className="input font-mono" placeholder="06000, 06010, 06020" required />
+          <Field
+            label="Códigos postales"
+            hint="Sepáralos con comas o espacios."
+            className="sm:col-span-2"
+          >
+            <textarea
+              name="postal_codes"
+              rows={2}
+              className="input font-mono"
+              placeholder="06000, 06010, 06020"
+              required
+            />
           </Field>
           <div className="sm:col-span-2">
             <button className="btn-primary">Agregar zona</button>
@@ -112,9 +215,9 @@ export default async function SettingsPage() {
 
         {zones.length > 0 && (
           <p className="text-sm text-cafe-700">
-            Resumen:{" "}
-            {zones.map((z) => `${z.name} ${money(z.fee)}`).join(" · ")}
-            {delivery.freeFrom > 0 && ` · Gratis desde ${money(delivery.freeFrom)}`}
+            Resumen: {zones.map((z) => `${z.name} ${money(z.fee)}`).join(" · ")}
+            {delivery.freeFrom > 0 &&
+              ` · Gratis desde ${money(delivery.freeFrom)}`}
           </p>
         )}
       </section>
@@ -122,25 +225,60 @@ export default async function SettingsPage() {
       <form action={saveLoyaltySettings} className="card space-y-3 text-sm">
         <h2 className="font-semibold">☕ Programa de lealtad</h2>
         <label className="flex items-center gap-2">
-          <input type="checkbox" name="enabled" defaultChecked={s.loyalty.enabled} /> Activar tarjeta de sellos
+          <input
+            type="checkbox"
+            name="enabled"
+            defaultChecked={s.loyalty.enabled}
+          />{" "}
+          Activar tarjeta de sellos
         </label>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Sellos para premio">
-            <input name="needed" type="number" min="1" max="50" className="input" defaultValue={s.loyalty.needed} />
+            <input
+              name="needed"
+              type="number"
+              min="1"
+              max="50"
+              className="input"
+              defaultValue={s.loyalty.needed}
+            />
           </Field>
           <Field label="Compra mínima ($)">
-            <input name="min" type="number" step="0.01" min="0" className="input" defaultValue={centsToInput(s.loyalty.minPurchase)} />
+            <input
+              name="min"
+              type="number"
+              step="0.01"
+              min="0"
+              className="input"
+              defaultValue={centsToInput(s.loyalty.minPurchase)}
+            />
           </Field>
           <Field label="Sellos duran (meses)">
-            <input name="months" type="number" min="1" max="24" className="input" defaultValue={s.loyalty.stampMonths} />
+            <input
+              name="months"
+              type="number"
+              min="1"
+              max="24"
+              className="input"
+              defaultValue={s.loyalty.stampMonths}
+            />
           </Field>
           <Field label="Bebida gratis dura (días)">
-            <input name="days" type="number" min="1" max="365" className="input" defaultValue={s.loyalty.rewardDays} />
+            <input
+              name="days"
+              type="number"
+              min="1"
+              max="365"
+              className="input"
+              defaultValue={s.loyalty.rewardDays}
+            />
           </Field>
         </div>
         <p className="text-cafe-600">
-          1 sello por día por teléfono, en compras pagadas desde la compra mínima (en línea con el teléfono del pedido; en la caja
-          escribiendo el teléfono del cliente). Premio: una bebida de hasta 12oz. Cancelar una venta quita su sello.
+          1 sello por día por teléfono, en compras pagadas desde la compra
+          mínima (en línea con el teléfono del pedido; en la caja escribiendo el
+          teléfono del cliente). Premio: una bebida de hasta 12oz. Cancelar una
+          venta quita su sello.
         </p>
         <p className={smsEnabled() ? "text-green-700" : "text-amber-700"}>
           {smsEnabled()
@@ -150,53 +288,172 @@ export default async function SettingsPage() {
         <button className="btn-secondary">Guardar lealtad</button>
       </form>
 
+      <form action={saveNtfySettings} className="card space-y-3 text-sm">
+        <h2 className="font-semibold">🔔 Avisos al celular (ntfy)</h2>
+        <ol className="list-decimal space-y-1 pl-5 text-cafe-700">
+          <li>
+            Instala la app gratuita <b>ntfy</b> en tu celular (Play Store o App
+            Store).
+          </li>
+          <li>
+            Toca <b>+</b>, escribe exactamente el mismo nombre de tema que
+            aparece abajo y suscríbete.
+          </li>
+          <li>Guarda aquí y toca “Enviar prueba”.</li>
+        </ol>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Nombre del tema">
+            <input
+              name="topic"
+              className="input font-mono"
+              pattern="[A-Za-z0-9_\-]{1,64}"
+              defaultValue={
+                s.ntfy.topic || `cafe-allison-${randomBytes(5).toString("hex")}`
+              }
+              required
+            />
+          </Field>
+          <Field label="Servidor">
+            <input
+              name="server"
+              className="input"
+              placeholder="https://ntfy.sh"
+              defaultValue={
+                s.ntfy.server === "https://ntfy.sh" ? "" : s.ntfy.server
+              }
+            />
+          </Field>
+        </div>
+        <p className="text-amber-700">
+          Cualquiera que conozca el nombre del tema puede leer los avisos: usa
+          uno difícil de adivinar y no lo compartas. Los avisos no incluyen
+          teléfonos ni direcciones.
+        </p>
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              name="new"
+              defaultChecked={s.ntfy.newOrders}
+            />{" "}
+            Pedidos nuevos
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              name="updates"
+              defaultChecked={s.ntfy.updates}
+            />{" "}
+            Cambios (estado, pago, cancelación)
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" name="pos" defaultChecked={s.ntfy.pos} />{" "}
+            También ventas de caja
+          </label>
+        </div>
+        <p className={s.ntfy.topic ? "text-green-700" : "text-cafe-600"}>
+          {s.ntfy.topic
+            ? `✓ Avisos activos en el tema “${s.ntfy.topic}”.`
+            : "Avisos apagados hasta que guardes un tema."}
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button className="btn-primary">Guardar avisos</button>
+          {s.ntfy.topic && <NtfyTestButton />}
+        </div>
+      </form>
+
       <PrinterSettingsCard businessName={s.business_name} />
 
       <div className="card space-y-1 text-sm">
         <h2 className="font-semibold">Pagos en línea (Stripe)</h2>
         {stripeEnabled() ? (
-          <p className="text-green-700">✓ Stripe está configurado. Tus clientes pueden pagar con tarjeta.</p>
+          <p className="text-green-700">
+            ✓ Stripe está configurado. Tus clientes pueden pagar con tarjeta.
+          </p>
         ) : (
           <p className="text-cafe-700">
-            No configurado. Agrega <code>STRIPE_SECRET_KEY</code> y <code>STRIPE_WEBHOOK_SECRET</code> en las variables de
-            entorno (ver README). Mientras tanto los clientes pueden pagar en efectivo o por WhatsApp.
+            No configurado. Agrega <code>STRIPE_SECRET_KEY</code> y{" "}
+            <code>STRIPE_WEBHOOK_SECRET</code> en las variables de entorno (ver
+            README). Mientras tanto los clientes pueden pagar en efectivo o por
+            WhatsApp.
           </p>
         )}
 
-        <form action={saveOnlineFee} className="mt-3 space-y-3 border-t border-cafe-100 pt-3">
+        <form
+          action={saveOnlineFee}
+          className="mt-3 space-y-3 border-t border-cafe-100 pt-3"
+        >
           <label className="flex items-start gap-2">
-            <input type="checkbox" name="enabled" className="mt-1" defaultChecked={s.online_fee.enabled} />
+            <input
+              type="checkbox"
+              name="enabled"
+              className="mt-1"
+              defaultChecked={s.online_fee.enabled}
+            />
             <span>
-              <strong>Incluir la comisión de Stripe en los precios de la tienda en línea</strong>
+              <strong>
+                Incluir la comisión de Stripe en los precios de la tienda en
+                línea
+              </strong>
               <span className="block text-cafe-600">
-                Todo el menú de la tienda en línea se muestra y cobra con la comisión incluida (redondeado al peso), sin leyenda
-                aparte. Al pagar con tarjeta se cubre además el cargo fijo por cobro (en el envío o en un producto). La caja del
-                panel usa siempre tus precios normales.
+                Todo el menú de la tienda en línea se muestra y cobra con la
+                comisión incluida (redondeado al peso), sin leyenda aparte. Al
+                pagar con tarjeta se cubre además el cargo fijo por cobro (en el
+                envío o en un producto). La caja del panel usa siempre tus
+                precios normales.
               </span>
             </span>
           </label>
           <div className="grid grid-cols-3 gap-2">
             <Field label="Porcentaje (%)">
-              <input name="percent" type="number" step="0.01" min="0" max="20" className="input" defaultValue={s.online_fee.percent} />
+              <input
+                name="percent"
+                type="number"
+                step="0.01"
+                min="0"
+                max="20"
+                className="input"
+                defaultValue={s.online_fee.percent}
+              />
             </Field>
             <Field label="Cargo fijo ($)">
-              <input name="fixed" type="number" step="0.01" min="0" className="input" defaultValue={centsToInput(s.online_fee.fixed)} />
+              <input
+                name="fixed"
+                type="number"
+                step="0.01"
+                min="0"
+                className="input"
+                defaultValue={centsToInput(s.online_fee.fixed)}
+              />
             </Field>
             <Field label="IVA (%)">
-              <input name="iva" type="number" step="1" min="0" max="30" className="input" defaultValue={s.online_fee.iva} />
+              <input
+                name="iva"
+                type="number"
+                step="1"
+                min="0"
+                max="30"
+                className="input"
+                defaultValue={s.online_fee.iva}
+              />
             </Field>
           </div>
           <p className="text-xs text-cafe-600">
             Ejemplo con estas tarifas:{" "}
             {[10000, 20000, 50000]
-              .map((a) => `${money(a)} → tienda en línea ${money(onlinePrice(a, { ...s.online_fee, enabled: true }))}`)
+              .map(
+                (a) =>
+                  `${money(a)} → tienda en línea ${money(onlinePrice(a, { ...s.online_fee, enabled: true }))}`,
+              )
               .join(" · ")}
             . Revisa la tarifa vigente en tu cuenta de Stripe.
           </p>
           <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">
-            ⚠️ En México, cobrar un cargo extra por pagar con tarjeta puede considerarse práctica indebida (Profeco) y algunos
-            contratos de procesadores lo prohíben. Consúltalo con tu contador antes de activarlo. Alternativa: incluir el costo en
-            el envío o en los precios.
+            ⚠️ En México, cobrar un cargo extra por pagar con tarjeta puede
+            considerarse práctica indebida (Profeco) y algunos contratos de
+            procesadores lo prohíben. Consúltalo con tu contador antes de
+            activarlo. Alternativa: incluir el costo en el envío o en los
+            precios.
           </p>
           <button className="btn-secondary">Guardar comisión</button>
         </form>

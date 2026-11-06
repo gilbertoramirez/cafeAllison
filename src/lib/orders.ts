@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { all, get, transaction } from "./db";
 import { availableToday } from "./format";
+import { notifyOrder } from "./notify";
 import { awardStamp, claimRewardForUpdate, revokeLoyaltyForOrder } from "./loyalty";
 import { FREE_NOTE, normalizePhone, pickFreeLine } from "./loyaltyRules";
 import type { Order, OrderItem, OrderStatus, PaymentMethod, Product } from "./types";
@@ -184,6 +185,8 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
     return newId;
   });
   if (input.paid) await awardStamp(orderId).catch((e) => console.error("lealtad", e));
+  // Los pagos con tarjeta avisan hasta que se confirma el pago
+  if (input.status !== "pago_pendiente") await notifyOrder(orderId, { kind: "nuevo" });
   return (await getOrderById(orderId))!;
 }
 
@@ -217,10 +220,12 @@ export async function itemsForOrders(orderIds: number[]): Promise<Map<number, Or
 /** Cambia el estado. Al cancelar regresa el stock y guarda motivo y fecha. */
 export async function setOrderStatus(orderId: number, status: OrderStatus, reason = "") {
   let paidNow = false;
+  let changedFrom: OrderStatus | null = null;
   await transaction(async (q) => {
     const [row] = await q<{ status: OrderStatus }>("SELECT status FROM orders WHERE id = ? FOR UPDATE", [orderId]);
     const prev = row?.status;
     if (!prev || prev === status) return;
+    changedFrom = prev;
     if (prev === "cancelado") throw new OrderError("Un pedido cancelado no se puede reabrir.");
     await q("UPDATE orders SET status = ?, change_seq = nextval('orders_change_seq') WHERE id = ?", [status, orderId]);
     // Entregado = ya se cobró: los pedidos que se pagan al recibir (efectivo/WhatsApp) quedan pagados
@@ -257,6 +262,10 @@ export async function setOrderStatus(orderId: number, status: OrderStatus, reaso
     }
   });
   if (paidNow) await awardStamp(orderId).catch((e) => console.error("lealtad", e));
+  // Un pago en línea que no se completó nunca apareció como pedido: no se avisa
+  if (changedFrom && !(changedFrom === "pago_pendiente" && status === "cancelado")) {
+    await notifyOrder(orderId, changedFrom === "pago_pendiente" ? { kind: "nuevo" } : { kind: "estado", status });
+  }
 }
 
 /** Borra por completo un pedido que ya fue cancelado (pruebas o errores de captura). */
@@ -274,19 +283,23 @@ export async function deleteCancelledOrder(orderId: number) {
 
 /** Marca como pagado. Si esperaba el pago en línea, el pedido entra al panel como "Nuevo". */
 export async function markOrderPaid(orderId: number) {
+  let event: "nuevo" | "pagado" | null = null;
   await transaction(async (q) => {
-    await q(
+    const paid = await q<{ id: number }>(
       `UPDATE orders SET payment_status = 'pagado', paid_at = COALESCE(paid_at, ?), change_seq = nextval('orders_change_seq')
-       WHERE id = ? AND status != 'cancelado' AND payment_status <> 'pagado'`,
+       WHERE id = ? AND status != 'cancelado' AND payment_status <> 'pagado' RETURNING id`,
       [new Date().toISOString(), orderId],
     );
-    await q(
+    const confirmed = await q<{ id: number }>(
       `UPDATE orders SET status = 'nuevo', confirmed_seq = nextval('orders_change_seq')
-       WHERE id = ? AND status = 'pago_pendiente' AND payment_status = 'pagado'`,
+       WHERE id = ? AND status = 'pago_pendiente' AND payment_status = 'pagado' RETURNING id`,
       [orderId],
     );
+    // Pago con tarjeta confirmado = el pedido aparece por primera vez
+    event = confirmed.length ? "nuevo" : paid.length ? "pagado" : null;
   });
   await awardStamp(orderId).catch((e) => console.error("lealtad", e));
+  if (event) await notifyOrder(orderId, { kind: event });
 }
 
 

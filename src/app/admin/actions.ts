@@ -6,7 +6,8 @@ import { checkPassword, endSession, passwordConfigured, requireAdmin, startSessi
 import { get, run, transaction } from "@/lib/db";
 import { addDays, addMonths, localDate, toCents } from "@/lib/format";
 import { createOrder, deleteCancelledOrder, markOrderPaid, OrderError, setOrderStatus } from "@/lib/orders";
-import { setSetting } from "@/lib/settings";
+import { getSettings, setSetting } from "@/lib/settings";
+import { sendNtfy } from "@/lib/notify";
 import { parseCps } from "@/lib/delivery";
 import { normalizePhone, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import { loyaltyStatus } from "@/lib/loyalty";
@@ -432,4 +433,31 @@ export async function saveLoyaltySettings(formData: FormData) {
   await setSetting("loyalty_stamp_months", String(Math.min(Math.max(int(formData, "months"), 1), 24)));
   await setSetting("loyalty_reward_days", String(Math.min(Math.max(int(formData, "days"), 1), 365)));
   done();
+}
+
+export async function saveNtfySettings(formData: FormData) {
+  await requireAdmin();
+  const topic = String(formData.get("topic") ?? "").trim();
+  if (topic && !/^[\w-]{1,64}$/.test(topic)) throw new Error("El tema solo puede tener letras, números, - y _ (máx. 64).");
+  const server = String(formData.get("server") ?? "").trim().replace(/\/$/, "");
+  if (server && !/^https?:\/\/[^\s/]+$/.test(server)) throw new Error("El servidor debe ser una dirección como https://ntfy.sh");
+  await setSetting("ntfy_topic", topic);
+  await setSetting("ntfy_server", server);
+  await setSetting("ntfy_new", formData.get("new") ? "1" : "0");
+  await setSetting("ntfy_updates", formData.get("updates") ? "1" : "0");
+  await setSetting("ntfy_pos", formData.get("pos") ? "1" : "0");
+  done();
+}
+
+export async function testNtfy(): Promise<{ ok: boolean; text: string }> {
+  await requireAdmin();
+  const { ntfy, business_name } = await getSettings();
+  if (!ntfy.topic) return { ok: false, text: "Primero guarda el nombre del tema." };
+  const err = await sendNtfy(ntfy, {
+    title: `✅ ${business_name}: avisos activados`,
+    message: "Así te llegarán los pedidos nuevos y sus cambios.",
+    tags: ["white_check_mark"],
+    priority: 4,
+  });
+  return err ? { ok: false, text: `No se pudo enviar: ${err}` } : { ok: true, text: "Enviado. Revisa tu celular." };
 }

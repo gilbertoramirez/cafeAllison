@@ -1,6 +1,7 @@
 import type { DeliveryRules, DeliveryZone } from "./delivery";
 import type { OnlineFeeRules } from "./fees";
 import type { LoyaltySettings } from "./loyaltyRules";
+import type { NtfySettings } from "./notify";
 import { all, run } from "./db";
 
 export type Settings = {
@@ -17,6 +18,8 @@ export type Settings = {
   /** Comisión por pago en línea trasladada al cliente */
   online_fee: OnlineFeeRules;
   loyalty: LoyaltySettings;
+  /** Avisos al celular con ntfy */
+  ntfy: NtfySettings;
 };
 
 export async function getSettings(): Promise<Settings> {
@@ -44,6 +47,13 @@ export async function getSettings(): Promise<Settings> {
       minPurchase: Number(m.loyalty_min_purchase ?? 5000),
       stampMonths: Math.max(1, Number(m.loyalty_stamp_months ?? 6)),
       rewardDays: Math.max(1, Number(m.loyalty_reward_days ?? 30)),
+    },
+    ntfy: {
+      server: m.ntfy_server || "https://ntfy.sh",
+      topic: m.ntfy_topic ?? "",
+      newOrders: m.ntfy_new !== "0",
+      updates: m.ntfy_updates !== "0",
+      pos: m.ntfy_pos === "1",
     },
   };
 }
