@@ -2,7 +2,19 @@ import { Field, PageTitle } from "@/components/admin/ui";
 import { all } from "@/lib/db";
 import { centsToInput, dateTime, money } from "@/lib/format";
 import { productLabel, type Product, type Supply } from "@/lib/types";
-import { adjustStock, deleteSupply, restock, saveSupply } from "../../actions";
+import { adjustStock, deleteSupply, restock, saveInventoryProduct, saveSupply } from "../../actions";
+
+const UNITS = ["pza", "kg", "g", "litro", "ml", "paquete", "caja", "bolsa", "botella", "lata", "galón", "docena"];
+
+/** Campo con etiqueta pequeña, para editar en renglón (también se entiende en celular). */
+function Cell({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <label className={`flex flex-col gap-0.5 ${className}`}>
+      <span className="text-[11px] font-medium text-cafe-600">{label}</span>
+      {children}
+    </label>
+  );
+}
 
 type Movement = {
   id: number;
@@ -122,83 +134,107 @@ export default async function InventoryPage() {
         </form>
       </div>
 
-      <section className="card overflow-x-auto">
-        <h2 className="mb-2 font-semibold">Productos con control de existencias</h2>
+      <section className="card space-y-3">
+        <div>
+          <h2 className="font-semibold">Productos con control de existencias</h2>
+          <p className="text-sm text-cafe-600">Cambia lo que necesites y toca Guardar en ese renglón.</p>
+        </div>
         {products.length === 0 ? (
           <p className="text-sm text-cafe-600">Activa “Controlar existencias” en un producto del menú.</p>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th className="text-right">Existencia</th>
-                <th className="text-right">Mínimo</th>
-                <th className="text-right">Costo unitario</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((p) => (
-                <tr key={p.id}>
-                  <td>{productLabel(p)}</td>
-                  <td className={`text-right tabular-nums ${p.stock <= p.min_stock ? "font-semibold text-red-700" : ""}`}>{p.stock}</td>
-                  <td className="text-right tabular-nums">{p.min_stock}</td>
-                  <td className="text-right tabular-nums">{money(p.cost)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="divide-y divide-cafe-100">
+            {products.map((p) => (
+              <form
+                key={p.id}
+                action={saveInventoryProduct}
+                className="grid grid-cols-2 items-end gap-2 py-3 sm:grid-cols-[minmax(10rem,1fr)_repeat(4,7rem)_auto]"
+              >
+                <input type="hidden" name="id" value={p.id} />
+                <div className="col-span-2 self-center sm:col-span-1">
+                  <p className="font-medium">{productLabel(p)}</p>
+                  {p.stock <= p.min_stock && <p className="text-xs font-semibold text-red-700">⚠️ Por resurtir</p>}
+                </div>
+                <Cell label="Precio venta ($)">
+                  <input name="price" type="number" step="0.01" min="0" className="input" defaultValue={centsToInput(p.price)} required />
+                </Cell>
+                <Cell label="Costo unitario ($)">
+                  <input name="cost" type="number" step="0.01" min="0" className="input" defaultValue={centsToInput(p.cost)} />
+                </Cell>
+                <Cell label="Existencia">
+                  <input
+                    name="stock"
+                    type="number"
+                    step="1"
+                    min="0"
+                    className={`input ${p.stock <= p.min_stock ? "border-red-300 text-red-700" : ""}`}
+                    defaultValue={p.stock}
+                  />
+                </Cell>
+                <Cell label="Mínimo">
+                  <input name="min_stock" type="number" step="1" min="0" className="input" defaultValue={p.min_stock} />
+                </Cell>
+                <button className="btn-secondary col-span-2 sm:col-span-1">Guardar</button>
+              </form>
+            ))}
+          </div>
         )}
       </section>
 
-      <section className="card space-y-3 overflow-x-auto">
-        <h2 className="font-semibold">Insumos (café en grano, leche, vasos…)</h2>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Insumo</th>
-              <th>Unidad</th>
-              <th className="text-right">Hay</th>
-              <th className="text-right">Mínimo</th>
-              <th className="text-right">Costo/unidad</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {supplies.map((s) => (
-              <tr key={s.id}>
-                <td colSpan={6} className="p-0">
-                  <form action={saveSupply} className="flex flex-wrap items-center gap-2 px-2 py-2">
-                    <input type="hidden" name="id" value={s.id} />
-                    <input name="name" defaultValue={s.name} className="input w-40 flex-1" required />
-                    <input name="unit" defaultValue={s.unit} className="input w-20" />
-                    <span className={`w-20 text-right tabular-nums ${s.qty <= s.min_qty ? "font-semibold text-red-700" : ""}`}>
-                      {s.qty}
-                    </span>
-                    <input name="min_qty" type="number" step="any" defaultValue={s.min_qty} className="input w-24" title="Mínimo" />
-                    <input
-                      name="cost_per_unit"
-                      type="number"
-                      step="0.01"
-                      defaultValue={centsToInput(s.cost_per_unit)}
-                      className="input w-28"
-                      title="Costo por unidad"
-                    />
-                    <button className="text-sm text-cafe-700 underline">Guardar</button>
-                    <button formAction={deleteSupply.bind(null, s.id)} className="text-sm text-red-700 underline">
-                      Borrar
-                    </button>
-                  </form>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <section className="card space-y-3">
+        <div>
+          <h2 className="font-semibold">Insumos (café en grano, leche, vasos…)</h2>
+          <p className="text-sm text-cafe-600">Cambia lo que necesites y toca Guardar en ese renglón.</p>
+        </div>
+        <datalist id="units">
+          {UNITS.map((u) => (
+            <option key={u} value={u} />
+          ))}
+        </datalist>
+        <div className="divide-y divide-cafe-100">
+          {supplies.map((s) => (
+            <form
+              key={s.id}
+              action={saveSupply}
+              className="grid grid-cols-2 items-end gap-2 py-3 sm:grid-cols-[minmax(10rem,1fr)_6.5rem_6rem_6rem_7rem_auto]"
+            >
+              <input type="hidden" name="id" value={s.id} />
+              <Cell label="Nombre" className="col-span-2 sm:col-span-1">
+                <input name="name" defaultValue={s.name} className="input" required />
+              </Cell>
+              <Cell label="Unidad">
+                <input name="unit" defaultValue={s.unit} className="input" list="units" />
+              </Cell>
+              <Cell label="Hay">
+                <input
+                  name="qty"
+                  type="number"
+                  step="any"
+                  min="0"
+                  defaultValue={s.qty}
+                  className={`input ${s.qty <= s.min_qty ? "border-red-300 text-red-700" : ""}`}
+                />
+              </Cell>
+              <Cell label="Mínimo">
+                <input name="min_qty" type="number" step="any" min="0" defaultValue={s.min_qty} className="input" />
+              </Cell>
+              <Cell label="Costo/unidad ($)">
+                <input name="cost_per_unit" type="number" step="0.01" min="0" defaultValue={centsToInput(s.cost_per_unit)} className="input" />
+              </Cell>
+              <div className="flex items-center gap-3">
+                <button className="btn-secondary">Guardar</button>
+                <button formAction={deleteSupply.bind(null, s.id)} formNoValidate className="text-sm text-red-700 underline">
+                  Borrar
+                </button>
+              </div>
+            </form>
+          ))}
+        </div>
         <form action={saveSupply} className="flex flex-wrap items-end gap-2 border-t border-cafe-100 pt-3">
           <Field label="Nuevo insumo" className="flex-1">
             <input name="name" className="input" placeholder="Leche entera" required />
           </Field>
           <Field label="Unidad">
-            <input name="unit" className="input w-24" placeholder="litro" />
+            <input name="unit" className="input w-24" placeholder="litro" list="units" />
           </Field>
           <Field label="Hay ahora">
             <input name="qty" type="number" step="any" min="0" className="input w-24" defaultValue={0} />

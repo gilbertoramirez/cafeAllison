@@ -351,16 +351,57 @@ export async function saveSupply(formData: FormData) {
   const minQty = num(formData, "min_qty");
   const cpu = toCents(formData.get("cost_per_unit"));
   if (id) {
-    await run(
-      "UPDATE supplies SET name=?, unit=?, min_qty=?, cost_per_unit=? WHERE id=?",
-      [name, unit, minQty, cpu, id],
-    );
+    await transaction(async (q) => {
+      await q(
+        "UPDATE supplies SET name=?, unit=?, min_qty=?, cost_per_unit=? WHERE id=?",
+        [name, unit, minQty, cpu, id],
+      );
+      // Si cambió la existencia, queda registrado como ajuste
+      if (formData.has("qty")) await setQtyWithMovement(q, "supply", id, num(formData, "qty"));
+    });
   } else {
     await run(
       "INSERT INTO supplies (name, unit, qty, min_qty, cost_per_unit) VALUES (?,?,?,?,?)",
       [name, unit, num(formData, "qty"), minQty, cpu],
     );
   }
+  done();
+}
+
+type Q = Parameters<Parameters<typeof transaction>[0]>[0];
+async function setQtyWithMovement(q: Q, type: "product" | "supply", id: number, value: number) {
+  if (!Number.isFinite(value) || value < 0) return;
+  const target = type === "product" ? Math.round(value) : value;
+  const [row] =
+    type === "product"
+      ? await q<{ v: number }>("SELECT stock AS v FROM products WHERE id = ? FOR UPDATE", [id])
+      : await q<{ v: number }>("SELECT qty AS v FROM supplies WHERE id = ? FOR UPDATE", [id]);
+  if (!row) return;
+  const change = target - Number(row.v);
+  if (Math.abs(change) < 1e-9) return;
+  if (type === "product") await q("UPDATE products SET stock = ? WHERE id = ?", [target, id]);
+  else await q("UPDATE supplies SET qty = ? WHERE id = ?", [target, id]);
+  await q("INSERT INTO inventory_movements (item_type, item_id, change, reason, note) VALUES (?,?,?,?,?)", [
+    type,
+    id,
+    change,
+    "ajuste",
+    "Editado en la lista de inventario",
+  ]);
+}
+
+/** Edición rápida de un producto desde Inventario: precio, costo, existencia y mínimo. */
+export async function saveInventoryProduct(formData: FormData) {
+  await requireAdmin();
+  const id = int(formData, "id");
+  if (!id) return;
+  const price = toCents(formData.get("price"));
+  const cost = toCents(formData.get("cost"));
+  const minStock = Math.max(0, Math.round(num(formData, "min_stock")));
+  await transaction(async (q) => {
+    await q("UPDATE products SET price = ?, cost = ?, min_stock = ? WHERE id = ?", [Math.max(price, 0), Math.max(cost, 0), minStock, id]);
+    if (formData.has("stock")) await setQtyWithMovement(q, "product", id, num(formData, "stock"));
+  });
   done();
 }
 
