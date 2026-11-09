@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { money } from "@/lib/format";
+import { tariffText } from "@/lib/delivery";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { waLink } from "@/lib/whatsapp";
 
@@ -70,27 +71,7 @@ export default async function CafePage() {
         />
         {settings.delivery_enabled ? (
           <>
-            <Info
-              icon="🛵"
-              title="A domicilio"
-              text={
-                delivery.zones.length
-                  ? "El costo depende de tu código postal:"
-                  : `Costo de envío: ${delivery.flatFee ? money(delivery.flatFee) : "gratis"}`
-              }
-            />
-            {delivery.zones.length > 0 && (
-              <ul className="divide-y divide-cafe-100 rounded-xl bg-cafe-50 px-3 text-sm">
-                {delivery.zones.map((z) => (
-                  <li key={z.id} className="flex justify-between gap-3 py-2">
-                    <span>{z.name}</span>
-                    <span className="font-semibold">
-                      {z.fee ? money(z.fee) : "Gratis"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <Info icon="🛵" title="A domicilio" text={`Costo de envío: ${tariffText(delivery, money)}.`} />
             {delivery.freeFrom > 0 && (
               <p className="text-sm text-cafe-700">
                 ✨ Envío gratis desde {money(delivery.freeFrom)}.

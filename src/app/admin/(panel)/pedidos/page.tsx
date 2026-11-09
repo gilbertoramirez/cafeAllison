@@ -139,6 +139,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                   <p>
                     📍 {o.address}
                     {o.postal_code && <span className="text-cafe-600"> · CP {o.postal_code}</span>}
+                    {o.delivery_km != null && <span className="text-cafe-600"> · {o.delivery_km} km</span>}
                   </p>
                   {o.address_ref && <p className="text-cafe-600">{o.address_ref}</p>}
                   <a

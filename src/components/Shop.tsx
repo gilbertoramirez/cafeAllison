@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { money } from "@/lib/format";
-import { normalizeCp, quoteDelivery, type DeliveryRules } from "@/lib/delivery";
+import { feeForDistance, normalizeCp, tariffText, type DeliveryRules } from "@/lib/delivery";
 import { cardPricing, type OnlineFeeRules } from "@/lib/fees";
 import { CART_KEY, rememberOrder } from "@/lib/myOrders";
 import { normalizePhone, pickFreeLine, type LoyaltySettings, type LoyaltyStatus } from "@/lib/loyaltyRules";
@@ -76,6 +76,50 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
   const [postalCode, setPostalCode] = useState("");
   const [addressRef, setAddressRef] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  // Envío por distancia: km desde la cafetería según la dirección (o la ubicación compartida)
+  const [dist, setDist] = useState<
+    | { status: "idle" | "loading" }
+    | { status: "ok"; km: number; formatted: string; approx: boolean; minutes: number | null }
+    | { status: "error"; message: string }
+  >({ status: "idle" });
+  const distKey =
+    deliveryType !== "domicilio" || !settings.delivery.maps
+      ? ""
+      : coords
+        ? `gps:${coords.lat.toFixed(5)},${coords.lng.toFixed(5)}`
+        : address.trim().length >= 6 && postalCode.length === 5
+          ? `dir:${address.trim()}|${postalCode}`
+          : "";
+  useEffect(() => {
+    if (!distKey) return setDist({ status: "idle" }); // eslint-disable-line react-hooks/set-state-in-effect
+    setDist({ status: "loading" });
+    let alive = true;
+    const t = setTimeout(
+      async () => {
+        try {
+          const res = await fetch("/api/envio", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ address, postalCode, lat: coords?.lat, lng: coords?.lng }),
+          });
+          const d = await res.json();
+          if (!alive) return;
+          setDist(
+            d.ok && typeof d.km === "number"
+              ? { status: "ok", km: d.km, formatted: d.formatted ?? "", approx: Boolean(d.approx), minutes: d.minutes ?? null }
+              : { status: "error", message: d.message ?? "No pudimos calcular el envío." },
+          );
+        } catch {
+          if (alive) setDist({ status: "error", message: "No pudimos calcular el envío. Revisa tu conexión." });
+        }
+      },
+      coords ? 0 : 1200,
+    );
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [distKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const [notes, setNotes] = useState("");
   const [payment, setPayment] = useState<"stripe" | "efectivo" | "whatsapp">(
     settings.stripe ? "stripe" : "efectivo",
@@ -207,14 +251,14 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
       : -1;
   const freeBase = freeIdx >= 0 ? lines[freeIdx].p.price : 0;
   const payableSubtotal = subtotal - freeBase; // a precio normal, sin la bebida gratis
-  const byZones = settings.delivery.zones.length > 0;
-  const quote = quoteDelivery(settings.delivery, postalCode, payableSubtotal);
+  const byDistance = settings.delivery.maps;
+  const quote = feeForDistance(settings.delivery, byDistance && dist.status === "ok" ? dist.km : null, payableSubtotal);
   const fee = deliveryType === "domicilio" && quote.ok ? quote.fee : 0;
   const missingForFree =
     deliveryType === "domicilio" && settings.delivery.freeFrom > 0 && payableSubtotal < settings.delivery.freeFrom
       ? settings.delivery.freeFrom - payableSubtotal
       : 0;
-  const deliveryBlocked = deliveryType === "domicilio" && !quote.ok;
+  const deliveryBlocked = deliveryType === "domicilio" && byDistance && dist.status !== "ok";
   // La tienda siempre cobra los precios del menú en línea (mismo cálculo que el servidor);
   // con tarjeta se suma además el cargo fijo de Stripe (en el envío o en un producto).
   // Líneas para calcular (la unidad gratis va aparte a $0, igual que en el servidor)
@@ -386,7 +430,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
                 <Choice active={deliveryType === "domicilio"} onClick={() => setDeliveryType("domicilio")}>
                   🛵 A domicilio
                   <span className="block text-xs font-normal opacity-75">
-                    {byZones ? "Envío según tu código postal" : `Envío ${money(settings.delivery.flatFee)}`}
+                    {byDistance ? "Envío según la distancia" : `Envío ${money(settings.delivery.baseFee)}`}
                   </span>
                 </Choice>
               )}
@@ -463,13 +507,27 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
             {deliveryType === "domicilio" && (
               <>
                 <div>
+                  <label className="label" htmlFor="addr">
+                    Dirección de entrega
+                  </label>
+                  <input
+                    id="addr"
+                    className="input"
+                    required
+                    autoComplete="street-address"
+                    placeholder="Calle, número, colonia"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                  />
+                </div>
+                <div>
                   <label className="label" htmlFor="cp">
                     Código postal
                   </label>
                   <input
                     id="cp"
                     className="input max-w-40"
-                    required={byZones}
+                    required={byDistance}
                     inputMode="numeric"
                     autoComplete="postal-code"
                     pattern="[0-9]{5}"
@@ -478,24 +536,35 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
                     value={postalCode}
                     onChange={(e) => setPostalCode(normalizeCp(e.target.value))}
                   />
-                  {byZones && postalCode.length === 5 && (
-                    <p className={`mt-1 text-sm ${quote.ok ? "text-green-700" : "text-red-700"}`} aria-live="polite">
-                      {quote.ok
-                        ? `✓ ${quote.zone} · ${quote.free ? "¡Envío gratis!" : `Envío ${money(quote.fee)}`}`
-                        : "Por ahora no llegamos a ese código postal. Puedes elegir “Paso a recoger”."}
-                    </p>
-                  )}
                 </div>
-                <div>
-                  <label className="label">Dirección de entrega</label>
-                  <input
-                    className="input"
-                    required
-                    placeholder="Calle, número, colonia"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                  />
-                </div>
+                {byDistance && (
+                  <div aria-live="polite" className="text-sm">
+                    {dist.status === "idle" && !coords && (
+                      <p className="text-cafe-600">
+                        Escribe tu dirección y código postal (o comparte tu ubicación) para calcular el envío.
+                        <span className="block text-xs">Tarifa: {tariffText(settings.delivery, money)}.</span>
+                      </p>
+                    )}
+                    {dist.status === "loading" && <p className="text-cafe-600">📍 Calculando envío…</p>}
+                    {dist.status === "ok" && (
+                      <div className="rounded-lg bg-green-50 p-2 text-green-800">
+                        <p>
+                          📍 {dist.formatted} · <b>{dist.km} km</b>
+                          {dist.minutes ? ` · ~${dist.minutes} min` : ""}
+                        </p>
+                        <p className="font-semibold">
+                          {quote.ok && (quote.free ? "¡Envío gratis!" : `Envío ${money(quote.fee)}`)}
+                        </p>
+                        {dist.approx && !coords && (
+                          <p className="mt-1 text-amber-700">
+                            Solo encontramos la zona aproximada. Si no es tu dirección, corrígela o toca “Compartir mi ubicación”.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {dist.status === "error" && <p className="rounded-lg bg-red-50 p-2 text-red-700">{dist.message}</p>}
+                  </div>
+                )}
                 <div>
                   <label className="label">Referencias (opcional)</label>
                   <input
@@ -565,9 +634,9 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
           <section className="card space-y-1 text-sm">
             <Row label="Subtotal" value={money(itemsTotal + freeValue)} />
             {freeIdx >= 0 && <Row label={`🎁 Bebida gratis (${lines[freeIdx].p.name})`} value={`−${money(freeValue)}`} />}
-            {deliveryType === "domicilio" && quote.ok && (
+            {deliveryType === "domicilio" && quote.ok && !deliveryBlocked && (
               <Row
-                label={quote.zone ? `Envío (${quote.zone})` : "Envío"}
+                label={byDistance && dist.status === "ok" ? `Envío (${dist.km} km)` : "Envío"}
                 value={deliveryCharged > 0 ? money(deliveryCharged) : "Gratis"}
               />
             )}

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { createOrder, OrderError, setOrderStatus } from "@/lib/orders";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
-import { normalizeCp, quoteDelivery } from "@/lib/delivery";
+import { feeForDistance, normalizeCp } from "@/lib/delivery";
+import { deliveryDistance } from "@/lib/maps";
+import { run } from "@/lib/db";
 import { cardPricing, onlinePrice, processorFee } from "@/lib/fees";
 import { createCheckoutSession } from "@/lib/payments";
 import { verifyRedeemCode } from "@/lib/loyalty";
@@ -53,14 +55,21 @@ export async function POST(req: Request) {
 
   const rules = await getDeliveryRules();
   const postalCode = normalizeCp(String(body.postalCode ?? ""));
-  if (deliveryType === "domicilio") {
-    const check = quoteDelivery(rules, postalCode, 0);
-    if (!check.ok) {
-      return bad(
-        check.reason === "cp_incompleto"
-          ? "Escribe tu código postal de 5 dígitos."
-          : `Por ahora no entregamos en el código postal ${postalCode}. Puedes pasar a recogerlo.`,
-      );
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  // Envío por distancia: se vuelve a medir aquí (no se confía en lo que manda la tienda)
+  let km: number | null = null;
+  if (deliveryType === "domicilio" && rules.maps) {
+    const lat = num(body.lat);
+    const lng = num(body.lng);
+    const dist = await deliveryDistance({
+      address,
+      postalCode,
+      location: lat !== null && lng !== null ? { lat, lng } : null,
+    });
+    if (!dist.ok) return bad(dist.message);
+    km = dist.km;
+    if (!feeForDistance(rules, km, 0).ok) {
+      return bad(`Tu dirección está a ${km} km y entregamos hasta ${rules.maxKm} km. Puedes elegir “Paso a recoger”.`);
     }
   }
 
@@ -71,8 +80,6 @@ export async function POST(req: Request) {
   if (body.useReward && !(await verifyRedeemCode(phone, String(body.loyaltyCode ?? "")))) {
     return bad("El código para tu bebida gratis no es correcto o ya venció.");
   }
-
-  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
   let order;
   try {
@@ -101,7 +108,7 @@ export async function POST(req: Request) {
           : (lines, delivery) => ({ prices: lines.map((l) => onlinePrice(l.price, settings.online_fee)), delivery }),
       processingFee: paymentMethod === "stripe" ? (total) => processorFee(total, settings.online_fee) : undefined,
       deliveryFee: (subtotal) => {
-        const q = quoteDelivery(rules, postalCode, subtotal);
+        const q = feeForDistance(rules, km, subtotal);
         return q.ok ? q.fee : 0;
       },
       minSubtotal: deliveryType === "domicilio" ? settings.min_delivery_order : 0,
@@ -112,6 +119,8 @@ export async function POST(req: Request) {
     if (e instanceof OrderError) return bad(e.message);
     throw e;
   }
+
+  if (km !== null) await run("UPDATE orders SET delivery_km = ? WHERE id = ?", [km, order.id]);
 
   if (paymentMethod !== "stripe") {
     return NextResponse.json({ token: order.token });

@@ -152,6 +152,12 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS confirmed_seq BIGINT NOT NULL DEFAUL
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS change_seq BIGINT NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_orders_change ON orders(change_seq);
+CREATE TABLE IF NOT EXISTS maps_cache (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_km DOUBLE PRECISION;
 CREATE TABLE IF NOT EXISTS delivery_zones (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -363,6 +369,9 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   online_fee_percent: "3.6",
   online_fee_fixed: "300",
   online_fee_iva: "16",
+  delivery_base_km: "3",
+  delivery_per_km: "500",
+  delivery_max_km: "8",
   loyalty_enabled: "1",
   loyalty_stamps_needed: "10",
   loyalty_min_purchase: "5000",

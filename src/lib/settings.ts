@@ -1,4 +1,4 @@
-import type { DeliveryRules, DeliveryZone } from "./delivery";
+import type { DeliveryRules } from "./delivery";
 import type { OnlineFeeRules } from "./fees";
 import type { LoyaltySettings } from "./loyaltyRules";
 import type { NtfySettings } from "./notify";
@@ -18,6 +18,14 @@ export type Settings = {
   /** Comisión por pago en línea trasladada al cliente */
   online_fee: OnlineFeeRules;
   loyalty: LoyaltySettings;
+  /** Envío por distancia: km incluidos en el envío base, cargo por km extra y distancia máxima */
+  delivery_base_km: number;
+  delivery_per_km: number;
+  delivery_max_km: number;
+  /** Ubicación exacta de la cafetería (punto de salida de los envíos) */
+  cafe_location: { lat: number; lng: number } | null;
+  /** La ubicación se fijó a mano (no se borra al cambiar la dirección) */
+  cafe_location_manual: boolean;
   /** Avisos al celular con ntfy */
   ntfy: NtfySettings;
 };
@@ -48,6 +56,14 @@ export async function getSettings(): Promise<Settings> {
       stampMonths: Math.max(1, Number(m.loyalty_stamp_months ?? 6)),
       rewardDays: Math.max(1, Number(m.loyalty_reward_days ?? 30)),
     },
+    delivery_base_km: Math.max(0, Number(m.delivery_base_km ?? 3)),
+    delivery_per_km: Math.max(0, Number(m.delivery_per_km ?? 500)),
+    delivery_max_km: Math.max(0, Number(m.delivery_max_km ?? 8)),
+    cafe_location:
+      m.cafe_lat && m.cafe_lng && Number.isFinite(Number(m.cafe_lat)) && Number.isFinite(Number(m.cafe_lng))
+        ? { lat: Number(m.cafe_lat), lng: Number(m.cafe_lng) }
+        : null,
+    cafe_location_manual: m.cafe_location_manual === "1",
     ntfy: {
       server: m.ntfy_server || "https://ntfy.sh",
       topic: m.ntfy_topic ?? "",
@@ -70,9 +86,13 @@ export function stripeEnabled(): boolean {
 }
 
 export async function getDeliveryRules(): Promise<DeliveryRules> {
-  const [s, zones] = await Promise.all([
-    getSettings(),
-    all<DeliveryZone>("SELECT id, name, postal_codes, fee FROM delivery_zones ORDER BY sort, fee, id"),
-  ]);
-  return { zones, flatFee: s.delivery_fee, freeFrom: s.free_delivery_from };
+  const s = await getSettings();
+  return {
+    baseFee: s.delivery_fee,
+    baseKm: s.delivery_base_km,
+    perKm: s.delivery_per_km,
+    maxKm: s.delivery_max_km,
+    freeFrom: s.free_delivery_from,
+    maps: Boolean(process.env.GOOGLE_MAPS_API_KEY),
+  };
 }

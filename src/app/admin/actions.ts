@@ -20,7 +20,6 @@ import {
 } from "@/lib/orders";
 import { getSettings, setSetting } from "@/lib/settings";
 import { sendNtfy } from "@/lib/notify";
-import { parseCps } from "@/lib/delivery";
 import { normalizePhone, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import { loyaltyStatus } from "@/lib/loyalty";
 import { ticketsByIds } from "@/lib/tickets-server";
@@ -501,7 +500,14 @@ export async function saveSettings(formData: FormData) {
     "whatsapp_number",
     str(formData, "whatsapp_number").replace(/[^\d+]/g, ""),
   );
-  await setSetting("address", str(formData, "address"));
+  const address = str(formData, "address");
+  const prev = await getSettings();
+  await setSetting("address", address);
+  // Nueva dirección sin ubicación fijada a mano: se vuelve a ubicar en el mapa en el siguiente envío
+  if (address !== prev.address && !prev.cafe_location_manual) {
+    await setSetting("cafe_lat", "");
+    await setSetting("cafe_lng", "");
+  }
   await setSetting("hours", str(formData, "hours"));
   await setSetting(
     "delivery_enabled",
@@ -509,48 +515,34 @@ export async function saveSettings(formData: FormData) {
   );
   await setSetting("store_open", formData.get("store_open") ? "1" : "0");
   await setSetting(
-    "delivery_fee",
-    String(toCents(formData.get("delivery_fee"))),
-  );
-  await setSetting(
     "min_delivery_order",
     String(toCents(formData.get("min_delivery_order"))),
-  );
-  await setSetting(
-    "free_delivery_from",
-    String(toCents(formData.get("free_delivery_from"))),
   );
   done();
 }
 
-// ---------- Zonas de envío por código postal ----------
-
-export async function saveZone(formData: FormData) {
+export async function saveDeliverySettings(formData: FormData) {
   await requireAdmin();
-  const id = int(formData, "id");
-  const name = str(formData, "name");
-  const cps = parseCps(str(formData, "postal_codes")).join(", ");
-  const fee = toCents(formData.get("fee"));
-  if (!name || !cps) return;
-  if (id) {
-    await run(
-      "UPDATE delivery_zones SET name = ?, postal_codes = ?, fee = ? WHERE id = ?",
-      [name, cps, fee, id],
-    );
-  } else {
-    await run(
-      "INSERT INTO delivery_zones (name, postal_codes, fee) VALUES (?, ?, ?)",
-      [name, cps, fee],
-    );
+  const km = (k: string) => String(Math.min(Math.max(Math.round(num(formData, k) * 10) / 10, 0), 500));
+  await setSetting("delivery_fee", String(toCents(formData.get("delivery_fee"))));
+  await setSetting("delivery_base_km", km("base_km"));
+  await setSetting("delivery_per_km", String(toCents(formData.get("per_km"))));
+  await setSetting("delivery_max_km", km("max_km"));
+  await setSetting("free_delivery_from", String(toCents(formData.get("free_delivery_from"))));
+  // Ubicación de la cafetería: "lat, lng" (vacío = usar la dirección del negocio)
+  const m = str(formData, "cafe_coords").match(/^\s*(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/);
+  if (m && Math.abs(Number(m[1])) <= 90 && Math.abs(Number(m[2])) <= 180) {
+    await setSetting("cafe_lat", m[1]);
+    await setSetting("cafe_lng", m[2]);
+    await setSetting("cafe_location_manual", "1");
+  } else if (!str(formData, "cafe_coords")) {
+    await setSetting("cafe_lat", "");
+    await setSetting("cafe_lng", "");
+    await setSetting("cafe_location_manual", "0");
   }
   done();
 }
 
-export async function deleteZone(id: number) {
-  await requireAdmin();
-  await run("DELETE FROM delivery_zones WHERE id = ?", [id]);
-  done();
-}
 
 // ---------- Comisión por pago en línea ----------
 

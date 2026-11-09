@@ -58,6 +58,8 @@ export type Order = {
   service_fee: number;
   /** comisión estimada que se queda el procesador de pagos (no es venta) */
   processing_fee: number;
+  /** km por calle desde la cafetería (envío por distancia) */
+  delivery_km: number | null;
 };
 
 export type OrderItem = {

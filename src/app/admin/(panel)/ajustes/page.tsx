@@ -1,16 +1,16 @@
 import { Field, PageTitle } from "@/components/admin/ui";
 import { centsToInput, money } from "@/lib/format";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
-import { parseCps } from "@/lib/delivery";
+import { feeForDistance } from "@/lib/delivery";
+import CafeLocationInput from "@/components/admin/CafeLocationInput";
 import { onlinePrice } from "@/lib/fees";
 import { randomBytes } from "node:crypto";
 import {
-  deleteZone,
+  saveDeliverySettings,
   saveLoyaltySettings,
   saveNtfySettings,
   saveOnlineFee,
   saveSettings,
-  saveZone,
 } from "../../actions";
 import NtfyTestButton from "@/components/admin/NtfyTestButton";
 import { smsEnabled } from "@/lib/sms";
@@ -18,7 +18,6 @@ import PrinterSettingsCard from "@/components/admin/PrinterSettingsCard";
 
 export default async function SettingsPage() {
   const [s, delivery] = await Promise.all([getSettings(), getDeliveryRules()]);
-  const zones = delivery.zones;
   return (
     <div className="max-w-2xl space-y-6">
       <PageTitle>Ajustes</PageTitle>
@@ -47,36 +46,6 @@ export default async function SettingsPage() {
         </Field>
         <Field label="Dirección" className="sm:col-span-2">
           <input name="address" className="input" defaultValue={s.address} />
-        </Field>
-        <Field
-          label="Costo de envío fijo ($)"
-          hint={
-            zones.length
-              ? "No se usa: el envío se calcula por zonas (abajo)."
-              : "Se usa mientras no configures zonas por código postal."
-          }
-        >
-          <input
-            name="delivery_fee"
-            type="number"
-            step="0.01"
-            min="0"
-            className="input"
-            defaultValue={centsToInput(s.delivery_fee)}
-          />
-        </Field>
-        <Field
-          label="Envío gratis desde ($)"
-          hint="Subtotal a partir del cual no se cobra envío. 0 = nunca gratis."
-        >
-          <input
-            name="free_delivery_from"
-            type="number"
-            step="0.01"
-            min="0"
-            className="input"
-            defaultValue={centsToInput(s.free_delivery_from)}
-          />
         </Field>
         <Field label="Pedido mínimo a domicilio ($)">
           <input
@@ -109,118 +78,62 @@ export default async function SettingsPage() {
         </div>
       </form>
 
-      <section className="card space-y-4">
-        <div>
-          <h2 className="font-semibold">🛵 Zonas de envío por código postal</h2>
-          <p className="text-sm text-cafe-600">
-            El cliente escribe su código postal y se cobra el envío de su zona.
-            Si su código postal no está en ninguna zona, no se permite pedir a
-            domicilio (solo recoger).
-            {zones.length === 0 &&
-              " Mientras no agregues zonas, se cobra el costo de envío fijo a cualquier dirección."}
-          </p>
+      <form action={saveDeliverySettings} className="card space-y-3 text-sm">
+        <h2 className="font-semibold">🛵 Envío a domicilio por distancia</h2>
+        <p className="text-cafe-600">
+          Medimos con Google Maps los km por calle desde la cafetería hasta la dirección del cliente.
+        </p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Field label="Envío base ($)">
+            <input name="delivery_fee" type="number" step="0.01" min="0" className="input" defaultValue={centsToInput(s.delivery_fee)} />
+          </Field>
+          <Field label="Incluye hasta (km)">
+            <input name="base_km" type="number" step="0.1" min="0" className="input" defaultValue={s.delivery_base_km} />
+          </Field>
+          <Field label="Por cada km extra ($)">
+            <input name="per_km" type="number" step="0.01" min="0" className="input" defaultValue={centsToInput(s.delivery_per_km)} />
+          </Field>
+          <Field label="Distancia máxima (km)" hint="0 = sin límite">
+            <input name="max_km" type="number" step="0.1" min="0" className="input" defaultValue={s.delivery_max_km} />
+          </Field>
+          <Field label="Envío gratis desde ($)" hint="0 = nunca gratis">
+            <input name="free_delivery_from" type="number" step="0.01" min="0" className="input" defaultValue={centsToInput(s.free_delivery_from)} />
+          </Field>
         </div>
-
-        {zones.map((z) => (
-          <form
-            key={z.id}
-            action={saveZone}
-            className="grid gap-2 rounded-lg border border-cafe-100 p-3 sm:grid-cols-[1fr_8rem]"
-          >
-            <input type="hidden" name="id" value={z.id} />
-            <Field label="Nombre de la zona">
-              <input
-                name="name"
-                className="input"
-                defaultValue={z.name}
-                required
-              />
-            </Field>
-            <Field label="Envío ($)">
-              <input
-                name="fee"
-                type="number"
-                step="0.01"
-                min="0"
-                className="input"
-                defaultValue={centsToInput(z.fee)}
-              />
-            </Field>
-            <Field
-              label={`Códigos postales (${parseCps(z.postal_codes).length})`}
-              className="sm:col-span-2"
-            >
-              <textarea
-                name="postal_codes"
-                rows={2}
-                className="input font-mono"
-                defaultValue={z.postal_codes}
-                required
-              />
-            </Field>
-            <div className="flex gap-3 sm:col-span-2">
-              <button className="btn-secondary">Guardar</button>
-              <button
-                formAction={deleteZone.bind(null, z.id)}
-                formNoValidate
-                className="text-sm text-red-700 underline"
+        <p className="rounded-lg bg-cafe-50 p-2 text-cafe-700">
+          Ejemplos: {[1.5, 4.2, 6.8].map((km) => {
+            const q = feeForDistance(delivery, km, 0);
+            return `${km} km → ${q.ok ? money(q.fee) : "no se entrega"}`;
+          }).join(" · ")}
+          <span className="block text-xs">El km extra se cobra completo aunque sea una fracción.</span>
+        </p>
+        <Field label="Ubicación exacta de la cafetería (de aquí salen los envíos)">
+          <CafeLocationInput defaultValue={s.cafe_location ? `${s.cafe_location.lat}, ${s.cafe_location.lng}` : ""} />
+        </Field>
+        <p className="text-cafe-600">
+          {s.cafe_location ? (
+            <>
+              ✓ Ubicación guardada.{" "}
+              <a
+                className="underline"
+                target="_blank"
+                rel="noopener noreferrer"
+                href={`https://www.google.com/maps/search/?api=1&query=${s.cafe_location.lat},${s.cafe_location.lng}`}
               >
-                Eliminar zona
-              </button>
-            </div>
-          </form>
-        ))}
-
-        <form
-          action={saveZone}
-          className="grid gap-2 rounded-lg border border-dashed border-cafe-300 p-3 sm:grid-cols-[1fr_8rem]"
-        >
-          <p className="text-sm font-medium sm:col-span-2">+ Nueva zona</p>
-          <Field label="Nombre de la zona">
-            <input
-              name="name"
-              className="input"
-              placeholder="Zona 1 · Centro"
-              required
-            />
-          </Field>
-          <Field label="Envío ($)">
-            <input
-              name="fee"
-              type="number"
-              step="0.01"
-              min="0"
-              className="input"
-              placeholder="25"
-              required
-            />
-          </Field>
-          <Field
-            label="Códigos postales"
-            hint="Sepáralos con comas o espacios."
-            className="sm:col-span-2"
-          >
-            <textarea
-              name="postal_codes"
-              rows={2}
-              className="input font-mono"
-              placeholder="06000, 06010, 06020"
-              required
-            />
-          </Field>
-          <div className="sm:col-span-2">
-            <button className="btn-primary">Agregar zona</button>
-          </div>
-        </form>
-
-        {zones.length > 0 && (
-          <p className="text-sm text-cafe-700">
-            Resumen: {zones.map((z) => `${z.name} ${money(z.fee)}`).join(" · ")}
-            {delivery.freeFrom > 0 &&
-              ` · Gratis desde ${money(delivery.freeFrom)}`}
-          </p>
-        )}
-      </section>
+                Verla en el mapa
+              </a>
+            </>
+          ) : (
+            "Si la dejas vacía se usa la dirección del negocio (arriba). Para más precisión toca “Estoy en la cafetería” estando en el local, o copia los números de Google Maps (mantén presionado sobre tu local)."
+          )}
+        </p>
+        <p className={delivery.maps ? "text-green-700" : "text-amber-700"}>
+          {delivery.maps
+            ? "✓ Google Maps está configurado."
+            : "Google Maps no está configurado: mientras tanto se cobra solo el envío base a cualquier dirección. Agrega GOOGLE_MAPS_API_KEY en Vercel."}
+        </p>
+        <button className="btn-primary">Guardar envío</button>
+      </form>
 
       <form action={saveLoyaltySettings} className="card space-y-3 text-sm">
         <h2 className="font-semibold">☕ Programa de lealtad</h2>
