@@ -260,7 +260,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
       : 0;
   const deliveryBlocked = deliveryType === "domicilio" && byDistance && dist.status !== "ok";
   // La tienda siempre cobra los precios del menú en línea (mismo cálculo que el servidor);
-  // con tarjeta se suma además el cargo fijo de Stripe (en el envío o en un producto).
+  // con tarjeta se suma además el cargo fijo de Stripe en un renglón aparte.
   // Líneas para calcular (la unidad gratis va aparte a $0, igual que en el servidor)
   const calc = lines.flatMap((l, i) =>
     i === freeIdx
@@ -274,7 +274,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
           fee,
           settings.onlineFee,
         )
-      : { prices: calc.map((c) => (c.free ? 0 : lines[c.i].p.menuPrice)), delivery: fee };
+      : { prices: calc.map((c) => (c.free ? 0 : lines[c.i].p.menuPrice)), delivery: fee, cardFee: 0 };
   const unitPrices = lines.map((l, i) => {
     const k = calc.findIndex((c) => c.i === i && !c.free);
     return k >= 0 ? priced.prices[k] : l.p.menuPrice;
@@ -282,7 +282,8 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
   const freeValue = freeIdx >= 0 ? lines[freeIdx].p.menuPrice : 0;
   const deliveryCharged = priced.delivery;
   const itemsTotal = calc.reduce((a, c, k) => a + priced.prices[k] * c.qty, 0);
-  const total = itemsTotal + deliveryCharged;
+  const cardFee = priced.cardFee;
+  const total = itemsTotal + deliveryCharged + cardFee;
   const belowMin = deliveryType === "domicilio" && payableSubtotal < settings.minDeliveryOrder;
 
   function addToCart(p: ShopProduct, qty: number, note: string) {
@@ -640,6 +641,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
                 value={deliveryCharged > 0 ? money(deliveryCharged) : "Gratis"}
               />
             )}
+            {cardFee > 0 && <Row label="Cargo por pago con tarjeta" value={money(cardFee)} />}
             <div className="flex justify-between pt-2 text-lg font-semibold">
               <span>Total</span>
               <span>{money(total)}</span>

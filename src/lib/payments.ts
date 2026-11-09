@@ -31,6 +31,14 @@ export async function createCheckoutSession(order: Order, businessName: string, 
             },
           ]
         : []),
+      ...(order.service_fee > 0
+        ? [
+            {
+              quantity: 1,
+              price_data: { currency: "mxn", unit_amount: order.service_fee, product_data: { name: "Cargo por pago con tarjeta" } },
+            },
+          ]
+        : []),
     ],
     payment_intent_data: { description: `${businessName} pedido ${orderCode(order.id)}` },
     success_url: `${base}/pedido/${order.token}?pago=ok`,

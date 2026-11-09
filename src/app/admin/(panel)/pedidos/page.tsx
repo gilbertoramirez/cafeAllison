@@ -120,7 +120,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                 )}
                 {o.service_fee > 0 && (
                   <li className="flex justify-between text-cafe-600">
-                    <span>Comisión pago en línea</span>
+                    <span>Cargo por pago con tarjeta</span>
                     <span>{money(o.service_fee)}</span>
                   </li>
                 )}

@@ -177,7 +177,7 @@ export default async function OrderPage({
         )}
         {order.service_fee > 0 && (
           <div className="flex justify-between text-cafe-700">
-            <span>Comisión por pago en línea</span>
+            <span>Cargo por pago con tarjeta</span>
             <span>{money(order.service_fee)}</span>
           </div>
         )}

@@ -31,7 +31,10 @@ export type NewOrderInput = {
    * Precios unitarios a cobrar (p. ej. con la comisión del pago con tarjeta incluida).
    * Recibe las líneas a precio normal y el envío; por defecto se usan los precios normales.
    */
-  pricing?: (lines: { price: number; qty: number }[], delivery: number) => { prices: number[]; delivery: number };
+  pricing?: (
+    lines: { price: number; qty: number }[],
+    delivery: number,
+  ) => { prices: number[]; delivery: number; cardFee?: number };
   /** Comisión estimada del procesador para el total final (se guarda para finanzas). */
   processingFee?: (total: number) => number;
   minSubtotal?: number;
@@ -112,14 +115,15 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
     }
     const fee = typeof input.deliveryFee === "function" ? input.deliveryFee(baseSubtotal) : (input.deliveryFee ?? 0);
     let deliveryFee = input.deliveryType === "domicilio" ? fee : 0;
+    let serviceFee = 0; // cargo por pago con tarjeta (cubre el cargo fijo de Stripe), en renglón aparte
     if (input.pricing) {
       const priced = input.pricing(lines.map((l) => ({ price: l.free ? 0 : l.p.price, qty: l.qty })), deliveryFee);
       lines.forEach((l, i) => (l.price = l.free ? 0 : (priced.prices[i] ?? l.p.price)));
       deliveryFee = priced.delivery;
+      serviceFee = priced.cardFee ?? 0;
     }
     const subtotal = lines.reduce((a, l) => a + l.price * l.qty, 0);
-    const serviceFee = 0; // la comisión va incluida en los precios, sin línea aparte
-    const total = subtotal + deliveryFee;
+    const total = subtotal + deliveryFee + serviceFee;
     const processingFee = input.processingFee ? input.processingFee(total) : 0;
     if (input.cashMustCover && input.cashGiven != null && input.cashGiven < total) {
       throw new OrderError("El efectivo recibido es menor al total.");

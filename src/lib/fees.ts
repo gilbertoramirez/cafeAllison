@@ -41,28 +41,21 @@ export function processorFee(charge: number, r: OnlineFeeRules): number {
 }
 
 /**
- * Precios para un pago con tarjeta en línea a domicilio. Cada producto lleva el porcentaje de la
- * comisión (igual que el precio del menú). Si eso no cubre el cargo fijo por cobro, la diferencia
- * (redondeada al peso) se suma al envío; si el envío es gratis, al precio de un producto.
- * Así no hace falta una línea de "comisión". Se usa igual en la tienda y en el servidor.
+ * Precios para un pago con tarjeta en línea. Productos y envío cuestan lo mismo que en efectivo
+ * (cada producto ya lleva el porcentaje de la comisión). Si eso no cubre el cargo fijo de Stripe
+ * por cobro, la diferencia (redondeada al peso) va en un renglón aparte: "Cargo por pago con tarjeta".
+ * Se usa igual en la tienda y en el servidor.
  */
 export function cardPricing(
   lines: { price: number; qty: number }[],
   delivery: number,
   r: OnlineFeeRules,
-): { prices: number[]; delivery: number } {
-  if (!r.enabled) return { prices: lines.map((l) => l.price), delivery };
+): { prices: number[]; delivery: number; cardFee: number } {
+  if (!r.enabled) return { prices: lines.map((l) => l.price), delivery, cardFee: 0 };
   const prices = lines.map((l) => onlinePrice(l.price, r));
   const base = lines.reduce((a, l) => a + l.price * l.qty, 0) + delivery;
   const charged = prices.reduce((a, p, i) => a + p * lines[i].qty, 0) + delivery;
   const residual = base + onlineFee(base, r) - charged;
-  if (residual <= 0 || !lines.length) return { prices, delivery };
-  if (delivery > 0) return { prices, delivery: delivery + Math.ceil(residual / 100) * 100 };
-  // Envío gratis: de preferencia en un producto de cantidad 1, para no multiplicar el ajuste
-  // (nunca en un producto gratis, que tiene precio $0)
-  let idx = lines.findIndex((l) => l.qty === 1 && l.price > 0);
-  if (idx < 0) idx = lines.findIndex((l) => l.price > 0);
-  if (idx < 0) return { prices, delivery };
-  prices[idx] += Math.ceil(residual / lines[idx].qty / 100) * 100;
-  return { prices, delivery };
+  if (residual <= 0 || !lines.length) return { prices, delivery, cardFee: 0 };
+  return { prices, delivery, cardFee: Math.ceil(residual / 100) * 100 };
 }

@@ -107,7 +107,7 @@ export function ticketLines(d: TicketData, cols: number): TicketLine[] {
   if (o.delivery_type === "domicilio") {
     row("Envío", o.delivery_fee ? money(o.delivery_fee) : "Gratis", cols).forEach((t) => L.push({ text: t }));
   }
-  if (o.service_fee) row("Comisión pago en línea", money(o.service_fee), cols).forEach((t) => L.push({ text: t }));
+  if (o.service_fee) row("Cargo pago con tarjeta", money(o.service_fee), cols).forEach((t) => L.push({ text: t }));
   row("TOTAL", money(o.total), Math.floor(cols / 2)).forEach((t) => L.push({ text: t, bold: true, big: true }));
   add(`Pago: ${PAYMENT[o.payment_method] ?? o.payment_method} · ${o.payment_status === "pagado" ? "PAGADO" : "POR COBRAR"}`);
   if (o.cash_given) {
