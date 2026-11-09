@@ -164,3 +164,85 @@ export async function deliveryDistance(input: {
     };
   }
 }
+
+export type RoutePlan = {
+  /** Orden de visita: índices de `stops` */
+  order: number[];
+  /** Tramos en el orden de visita (el último es el regreso a la cafetería si aplica) */
+  legs: { km: number; minutes: number | null }[];
+  totalKm: number;
+  totalMinutes: number | null;
+  /** true = Google Maps calculó el orden; false = aproximación por cercanía */
+  optimized: boolean;
+};
+
+/** Orden por cercanía (siguiente parada = la más cercana), para cuando Google Maps no está disponible. */
+function nearestNeighbor(origin: LatLng, stops: LatLng[], returnToCafe: boolean): RoutePlan {
+  const left = stops.map((_, i) => i);
+  const order: number[] = [];
+  const legs: RoutePlan["legs"] = [];
+  let at = origin;
+  while (left.length) {
+    let best = 0;
+    for (let k = 1; k < left.length; k++) if (straightKm(at, stops[left[k]]) < straightKm(at, stops[left[best]])) best = k;
+    const i = left.splice(best, 1)[0];
+    legs.push({ km: Math.round(straightKm(at, stops[i]) * 1.4 * 10) / 10, minutes: null });
+    order.push(i);
+    at = stops[i];
+  }
+  if (returnToCafe) legs.push({ km: Math.round(straightKm(at, origin) * 1.4 * 10) / 10, minutes: null });
+  return { order, legs, totalKm: Math.round(legs.reduce((a, l) => a + l.km, 0) * 10) / 10, totalMinutes: null, optimized: false };
+}
+
+/**
+ * Mejor orden para entregar varias paradas saliendo de la cafetería (Routes API con optimizeWaypointOrder).
+ * Sin regreso: la parada más lejana queda al final y Google ordena las demás.
+ */
+export async function optimizeRoute(origin: LatLng, stops: LatLng[], returnToCafe: boolean): Promise<RoutePlan> {
+  if (!stops.length) return { order: [], legs: [], totalKm: 0, totalMinutes: 0, optimized: false };
+  if (!mapsEnabled()) return nearestNeighbor(origin, stops, returnToCafe);
+  let last = -1;
+  if (!returnToCafe) {
+    last = 0;
+    for (let i = 1; i < stops.length; i++) if (straightKm(origin, stops[i]) > straightKm(origin, stops[last])) last = i;
+  }
+  const middle = stops.map((_, i) => i).filter((i) => i !== last);
+  const point = (p: LatLng) => ({ location: { latLng: { latitude: p.lat, longitude: p.lng } } });
+  try {
+    const res = await fetch(ROUTES_URL(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": process.env.GOOGLE_MAPS_API_KEY ?? "",
+        "X-Goog-FieldMask": "routes.optimizedIntermediateWaypointIndex,routes.legs.distanceMeters,routes.legs.duration",
+      },
+      body: JSON.stringify({
+        origin: point(origin),
+        destination: point(returnToCafe ? origin : stops[last]),
+        intermediates: middle.map((i) => point(stops[i])),
+        travelMode: "DRIVE",
+        optimizeWaypointOrder: middle.length > 1,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = (await res.json()) as {
+      routes?: { optimizedIntermediateWaypointIndex?: number[]; legs?: { distanceMeters?: number; duration?: string }[] }[];
+      error?: { message?: string };
+    };
+    if (!res.ok) throw new MapsError(`Google Maps (Routes): ${res.status} ${data.error?.message ?? ""}`.trim());
+    const route = data.routes?.[0];
+    if (!route?.legs?.length) throw new MapsError("Google Maps no encontró una ruta");
+    const idx = route.optimizedIntermediateWaypointIndex;
+    const midOrder = middle.length > 1 && idx?.length === middle.length && idx[0] >= 0 ? idx.map((k) => middle[k]) : middle;
+    const order = returnToCafe ? midOrder : [...midOrder, last];
+    const legs = route.legs.map((l) => ({
+      km: Math.round(((l.distanceMeters ?? 0) / 1000) * 10) / 10,
+      minutes: l.duration ? Math.round(parseInt(l.duration) / 60) : null,
+    }));
+    const mins = legs.every((l) => l.minutes !== null) ? legs.reduce((a, l) => a + (l.minutes ?? 0), 0) : null;
+    return { order, legs, totalKm: Math.round(legs.reduce((a, l) => a + l.km, 0) * 10) / 10, totalMinutes: mins, optimized: true };
+  } catch (e) {
+    console.error("maps", e);
+    return nearestNeighbor(origin, stops, returnToCafe);
+  }
+}

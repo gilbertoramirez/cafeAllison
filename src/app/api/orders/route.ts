@@ -58,6 +58,7 @@ export async function POST(req: Request) {
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
   // Envío por distancia: se vuelve a medir aquí (no se confía en lo que manda la tienda)
   let km: number | null = null;
+  let dest: { lat: number; lng: number } | null = null;
   if (deliveryType === "domicilio" && rules.maps) {
     const lat = num(body.lat);
     const lng = num(body.lng);
@@ -68,6 +69,7 @@ export async function POST(req: Request) {
     });
     if (!dist.ok) return bad(dist.message);
     km = dist.km;
+    dest = dist.destination;
     if (!feeForDistance(rules, km, 0).ok) {
       return bad(`Tu dirección está a ${km} km y entregamos hasta ${rules.maxKm} km. Puedes elegir “Paso a recoger”.`);
     }
@@ -120,7 +122,10 @@ export async function POST(req: Request) {
     throw e;
   }
 
-  if (km !== null) await run("UPDATE orders SET delivery_km = ? WHERE id = ?", [km, order.id]);
+  // km y punto de entrega (para planear la ruta de reparto)
+  if (km !== null) {
+    await run("UPDATE orders SET delivery_km = ?, dest_lat = ?, dest_lng = ? WHERE id = ?", [km, dest?.lat ?? null, dest?.lng ?? null, order.id]);
+  }
 
   if (paymentMethod !== "stripe") {
     return NextResponse.json({ token: order.token });

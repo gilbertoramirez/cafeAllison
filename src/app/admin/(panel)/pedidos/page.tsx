@@ -51,7 +51,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             ? ["1=1", []]
             : ["status NOT IN ('entregado','cancelado','pago_pendiente')", []];
   const orders = await all<Order>(`SELECT * FROM orders WHERE ${where[0]} ORDER BY created_at DESC LIMIT 200`, where[1] as string[]);
-  const [items, settings, base] = await Promise.all([itemsForOrders(orders.map((o) => o.id)), getSettings(), siteUrl()]);
+  const [items, settings, base, drivers] = await Promise.all([
+    itemsForOrders(orders.map((o) => o.id)),
+    getSettings(),
+    siteUrl(),
+    all<{ id: number; name: string }>("SELECT id, name FROM drivers"),
+  ]);
+  const driverName = new Map(drivers.map((d) => [d.id, d.name]));
 
   return (
     <div>
@@ -140,6 +146,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     📍 {o.address}
                     {o.postal_code && <span className="text-cafe-600"> · CP {o.postal_code}</span>}
                     {o.delivery_km != null && <span className="text-cafe-600"> · {o.delivery_km} km</span>}
+                    {o.driver_id != null && (
+                      <span className="text-cafe-600"> · 🧑‍✈️ {driverName.get(o.driver_id) ?? "Repartidor eliminado"}</span>
+                    )}
                   </p>
                   {o.address_ref && <p className="text-cafe-600">{o.address_ref}</p>}
                   <a

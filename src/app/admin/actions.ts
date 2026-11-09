@@ -21,6 +21,8 @@ import {
 import { getSettings, setSetting } from "@/lib/settings";
 import { sendNtfy } from "@/lib/notify";
 import { isShortMapsLink, parseCoords, resolveShortMapsLink } from "@/lib/coords";
+import { markDelivered, markOnTheWay, planRoute, type RouteResult } from "@/lib/deliveryRoute";
+import { hashPin, validPin } from "@/lib/drivers";
 import { normalizePhone, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import { loyaltyStatus } from "@/lib/loyalty";
 import { ticketsByIds } from "@/lib/tickets-server";
@@ -645,4 +647,84 @@ export async function testNtfy(): Promise<{ ok: boolean; text: string }> {
         ok: true,
         text: `✓ Enviado al tema ${where}. Si no te llegó, revisa que la app ntfy esté suscrita a ese mismo tema.`,
       };
+}
+
+// ---------- Reparto (la lógica vive en lib/deliveryRoute.ts) ----------
+
+export async function planDeliveryRoute(orderIds: number[], returnToCafe: boolean): Promise<RouteResult> {
+  await requireAdmin();
+  return planRoute(orderIds, returnToCafe);
+}
+
+/** Marca "En camino" varios pedidos a la vez (salida del repartidor). */
+export async function markOrdersOnTheWay(orderIds: number[]) {
+  await requireAdmin();
+  await markOnTheWay(orderIds, null);
+  done();
+}
+
+export async function deliverOrder(orderId: number) {
+  await requireAdmin();
+  await markDelivered(orderId, null);
+  done();
+}
+
+// ---------- Repartidores ----------
+
+function driversBack(msg: string, ok = true): never {
+  redirect(`/admin/repartidores?${ok ? "ok" : "error"}=${encodeURIComponent(msg)}`);
+}
+
+export async function createDriver(formData: FormData) {
+  await requireAdmin();
+  const name = str(formData, "name").slice(0, 60);
+  const phone = normalizePhone(str(formData, "phone"));
+  const pin = str(formData, "pin");
+  if (!name) driversBack("Escribe el nombre del repartidor.", false);
+  if (!phone) driversBack("Escribe un teléfono de 10 dígitos.", false);
+  if (!validPin(pin)) driversBack("El PIN debe tener exactamente 6 números.", false);
+  const exists = await get<{ id: number }>("SELECT id FROM drivers WHERE phone = ?", [phone]);
+  if (exists) driversBack("Ya hay un repartidor con ese teléfono.", false);
+  await run("INSERT INTO drivers (name, phone, pin_hash) VALUES (?, ?, ?)", [name, phone, hashPin(pin)]);
+  driversBack(`${name} ya puede entrar en /repartidor con su teléfono y PIN.`);
+}
+
+export async function updateDriver(formData: FormData) {
+  await requireAdmin();
+  const id = int(formData, "id");
+  const name = str(formData, "name").slice(0, 60);
+  const phone = normalizePhone(str(formData, "phone"));
+  if (!id || !name || !phone) driversBack("Revisa el nombre y el teléfono.", false);
+  const other = await get<{ id: number }>("SELECT id FROM drivers WHERE phone = ? AND id <> ?", [phone, id]);
+  if (other) driversBack("Ya hay otro repartidor con ese teléfono.", false);
+  await run("UPDATE drivers SET name = ?, phone = ? WHERE id = ?", [name, phone, id]);
+  driversBack("Datos guardados.");
+}
+
+/** Nuevo PIN: también cierra la sesión que tenga abierta y quita el bloqueo por intentos. */
+export async function resetDriverPin(formData: FormData) {
+  await requireAdmin();
+  const id = int(formData, "id");
+  const pin = str(formData, "pin");
+  if (!validPin(pin)) driversBack("El PIN debe tener exactamente 6 números.", false);
+  await run(
+    "UPDATE drivers SET pin_hash = ?, session_version = session_version + 1, failed_attempts = 0, locked_until = NULL WHERE id = ?",
+    [hashPin(pin), id],
+  );
+  driversBack("PIN cambiado. Su sesión anterior se cerró.");
+}
+
+/** Activar/desactivar: al desactivar se cierra su sesión al instante. */
+export async function toggleDriver(id: number) {
+  await requireAdmin();
+  const d = await get<{ active: number; name: string }>("SELECT active, name FROM drivers WHERE id = ?", [id]);
+  if (!d) driversBack("No existe ese repartidor.", false);
+  await run("UPDATE drivers SET active = ?, session_version = session_version + 1 WHERE id = ?", [d.active ? 0 : 1, id]);
+  driversBack(d.active ? `${d.name} ya no puede entrar.` : `${d.name} puede volver a entrar.`);
+}
+
+export async function deleteDriver(id: number) {
+  await requireAdmin();
+  await run("DELETE FROM drivers WHERE id = ?", [id]);
+  driversBack("Repartidor eliminado.");
 }

@@ -9,6 +9,8 @@ const LINKS = [
   { href: "/admin/pos", label: "Punto de venta", short: "Caja", icon: "🧾" },
   { href: "/admin/pedidos", label: "Pedidos", short: "Pedidos", icon: "🛵" },
   { href: "/admin/productos", label: "Menú", short: "Menú", icon: "☕" },
+  { href: "/admin/reparto", label: "Reparto", short: "Reparto", icon: "🗺️" },
+  { href: "/admin/repartidores", label: "Repartidores", short: "Repartidores", icon: "🧑‍✈️" },
   { href: "/admin/inventario", label: "Inventario", short: "Inventario", icon: "📦" },
   { href: "/admin/gastos", label: "Gastos", short: "Gastos", icon: "💸" },
   { href: "/admin/finanzas", label: "Finanzas", short: "Finanzas", icon: "📈" },

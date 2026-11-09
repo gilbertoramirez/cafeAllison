@@ -60,6 +60,11 @@ export type Order = {
   processing_fee: number;
   /** km por calle desde la cafetería (envío por distancia) */
   delivery_km: number | null;
+  /** punto de entrega en el mapa (ubicación compartida o dirección encontrada) */
+  dest_lat: number | null;
+  dest_lng: number | null;
+  /** repartidor que lo llevó */
+  driver_id: number | null;
 };
 
 export type OrderItem = {
