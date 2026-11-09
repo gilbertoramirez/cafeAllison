@@ -20,6 +20,7 @@ import {
 } from "@/lib/orders";
 import { getSettings, setSetting } from "@/lib/settings";
 import { sendNtfy } from "@/lib/notify";
+import { isShortMapsLink, parseCoords, resolveShortMapsLink } from "@/lib/coords";
 import { normalizePhone, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import { loyaltyStatus } from "@/lib/loyalty";
 import { ticketsByIds } from "@/lib/tickets-server";
@@ -521,6 +522,24 @@ export async function saveSettings(formData: FormData) {
   done();
 }
 
+/** Convierte un link de Google Maps (también los cortos maps.app.goo.gl) en coordenadas. */
+export async function coordsFromMapsLink(
+  text: string,
+): Promise<{ ok: true; lat: number; lng: number } | { ok: false; message: string }> {
+  await requireAdmin();
+  const direct = parseCoords(text);
+  if (direct) return { ok: true, ...direct };
+  if (isShortMapsLink(text)) {
+    const c = await resolveShortMapsLink(text).catch(() => null);
+    if (c) return { ok: true, ...c };
+  }
+  return {
+    ok: false,
+    message:
+      "No encontramos coordenadas en ese link. En Google Maps mantén presionado sobre tu local y copia los números que aparecen.",
+  };
+}
+
 export async function saveDeliverySettings(formData: FormData) {
   await requireAdmin();
   const km = (k: string) => String(Math.min(Math.max(Math.round(num(formData, k) * 10) / 10, 0), 500));
@@ -529,13 +548,14 @@ export async function saveDeliverySettings(formData: FormData) {
   await setSetting("delivery_per_km", String(toCents(formData.get("per_km"))));
   await setSetting("delivery_max_km", km("max_km"));
   await setSetting("free_delivery_from", String(toCents(formData.get("free_delivery_from"))));
-  // Ubicación de la cafetería: "lat, lng" (vacío = usar la dirección del negocio)
-  const m = str(formData, "cafe_coords").match(/^\s*(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/);
-  if (m && Math.abs(Number(m[1])) <= 90 && Math.abs(Number(m[2])) <= 180) {
-    await setSetting("cafe_lat", m[1]);
-    await setSetting("cafe_lng", m[2]);
+  // Ubicación de la cafetería: "lat, lng" o link de Google Maps (vacío = usar la dirección del negocio)
+  const raw = str(formData, "cafe_coords");
+  const c = parseCoords(raw) ?? (isShortMapsLink(raw) ? await resolveShortMapsLink(raw).catch(() => null) : null);
+  if (c) {
+    await setSetting("cafe_lat", String(c.lat));
+    await setSetting("cafe_lng", String(c.lng));
     await setSetting("cafe_location_manual", "1");
-  } else if (!str(formData, "cafe_coords")) {
+  } else if (!raw) {
     await setSetting("cafe_lat", "");
     await setSetting("cafe_lng", "");
     await setSetting("cafe_location_manual", "0");

@@ -124,7 +124,7 @@ export default async function SettingsPage() {
               </a>
             </>
           ) : (
-            "Si la dejas vacía se usa la dirección del negocio (arriba). Para más precisión toca “Estoy en la cafetería” estando en el local, o copia los números de Google Maps (mantén presionado sobre tu local)."
+            "Pega aquí el link de tu local en Google Maps (o sus coordenadas), o toca “Estoy en la cafetería” estando en el local. Si la dejas vacía se usa la dirección del negocio."
           )}
         </p>
         <p className={delivery.maps ? "text-green-700" : "text-amber-700"}>
