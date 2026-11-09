@@ -372,6 +372,12 @@ async function syncMenu(q: Q) {
   }
 }
 
+/** Productos del menú de prueba inicial (antes de cargar el menú real). */
+const DEMO_PRODUCTS = [
+  "Espresso", "Americano", "Capuchino", "Latte", "Mocha", "Frappé de café", "Cold brew", "Chai latte",
+  "Chocolate caliente", "Croissant", "Concha", "Galleta de chispas", "Sándwich de pavo", "Chilaquiles",
+];
+
 const DEFAULT_SETTINGS: Record<string, string> = {
   business_name: "Café Allison",
   whatsapp_number: "",
@@ -409,6 +415,25 @@ async function init(b: Backend) {
         "INSERT INTO settings (key, value) VALUES ('menu_version', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
         [MENU_VERSION],
       );
+    }
+    // Una sola vez: quitar los productos de prueba del primer menú que quedaron ocultos.
+    // Sin ventas se borran (con sus movimientos); con ventas quedan ocultos y fuera del inventario.
+    const [demoMig] = await q<{ value: string }>("SELECT value FROM settings WHERE key = 'demo_cleanup_v1'");
+    if (!demoMig) {
+      const demo = await q<{ id: number; sold: number }>(
+        `SELECT p.id, (SELECT COUNT(*) FROM order_items oi WHERE oi.product_id = p.id) AS sold
+         FROM products p WHERE p.active = 0 AND p.name IN (${DEMO_PRODUCTS.map(() => "?").join(",")})`,
+        DEMO_PRODUCTS,
+      );
+      for (const d of demo) {
+        if (Number(d.sold) > 0) {
+          await q("UPDATE products SET track_stock = 0 WHERE id = ?", [d.id]);
+        } else {
+          await q("DELETE FROM inventory_movements WHERE item_type = 'product' AND item_id = ?", [d.id]);
+          await q("DELETE FROM products WHERE id = ?", [d.id]);
+        }
+      }
+      await q("INSERT INTO settings (key, value) VALUES ('demo_cleanup_v1', '1') ON CONFLICT (key) DO NOTHING");
     }
     await q("UPDATE products SET description = ? WHERE description = ?", [FLAVOR, OLD_FLAVOR]);
     // Pedidos anteriores ya confirmados: marca de "visible en el panel" para comandas automáticas

@@ -35,7 +35,7 @@ const REASON: Record<string, string> = {
 
 export default async function InventoryPage() {
   const [products, supplies, movements] = await Promise.all([
-    all<Product>("SELECT * FROM products WHERE track_stock = 1 ORDER BY active DESC, name"),
+    all<Product>("SELECT * FROM products WHERE track_stock = 1 AND active = 1 ORDER BY name"),
     all<Supply>("SELECT * FROM supplies ORDER BY name"),
     all<Movement>(
       `SELECT m.*, CASE m.item_type WHEN 'product' THEN p.name || CASE WHEN p.size <> '' THEN ' (' || p.size || ')' ELSE '' END ELSE s.name END AS name
