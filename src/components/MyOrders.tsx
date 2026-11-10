@@ -242,8 +242,8 @@ export function MyOrdersView() {
 /** Pestaña "Recompensas": tarjeta de sellos del teléfono guardado en este celular. */
 export function RewardsView({ rules }: { rules: LoyaltySettings }) {
   const [phone, setPhone] = useState("");
-  const [card, setCard] = useState<LoyaltyStatus | null>(null);
-  const [checked, setChecked] = useState(false);
+  // Sellos del último número consultado (con su número, para no mostrar datos viejos mientras carga)
+  const [loaded, setLoaded] = useState<{ key: string; status: LoyaltyStatus | null } | null>(null);
   useEffect(() => {
     try {
       const saved = JSON.parse(
@@ -254,16 +254,12 @@ export function RewardsView({ rules }: { rules: LoyaltySettings }) {
   }, []);
   const key = normalizePhone(phone);
   useEffect(() => {
-    if (!key) return setCard(null); // eslint-disable-line react-hooks/set-state-in-effect
+    if (!key) return;
     let alive = true;
     const t = setTimeout(() => {
       fetch(`/api/lealtad?phone=${key}`, { cache: "no-store" })
         .then((r) => r.json())
-        .then((d) => {
-          if (!alive) return;
-          setCard(d.status);
-          setChecked(true);
-        })
+        .then((d) => alive && setLoaded({ key, status: d.status }))
         .catch(() => {});
     }, 300);
     return () => {
@@ -271,12 +267,18 @@ export function RewardsView({ rules }: { rules: LoyaltySettings }) {
       clearTimeout(t);
     };
   }, [key]);
+  const ready = Boolean(key) && loaded?.key === key;
+  const empty = { stamps: 0, needed: rules.needed, rewards: [] };
 
   return (
     <div className="space-y-4">
-      <LoyaltyCard
-        status={card ?? { stamps: 0, needed: rules.needed, rewards: [] }}
-      />
+      {key && !ready ? (
+        <div className="flex h-32 items-center justify-center rounded-xl bg-cafe-900 text-sm text-cafe-200" aria-live="polite">
+          ☕ Cargando tus sellos…
+        </div>
+      ) : (
+        <LoyaltyCard status={(ready && loaded?.status) || empty} />
+      )}
       <div className="space-y-2 rounded-2xl bg-white p-4 shadow-sm">
         <label className="label" htmlFor="rewards-phone">
           Tu teléfono
@@ -292,7 +294,7 @@ export function RewardsView({ rules }: { rules: LoyaltySettings }) {
         />
         <p className="text-xs text-cafe-600">
           {key
-            ? checked
+            ? ready
               ? "Estos son los sellos de este número."
               : "Buscando tus sellos…"
             : "Escribe el número con el que haces tus pedidos."}
