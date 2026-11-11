@@ -2,6 +2,7 @@ import type { DeliveryRules } from "./delivery";
 import type { OnlineFeeRules } from "./fees";
 import type { LoyaltySettings } from "./loyaltyRules";
 import type { NtfySettings } from "./notify";
+import type { ScheduleRules } from "./schedule";
 import { all, run } from "./db";
 
 export type Settings = {
@@ -28,6 +29,8 @@ export type Settings = {
   cafe_location_manual: boolean;
   /** Avisos al celular con ntfy */
   ntfy: NtfySettings;
+  /** Horario de pedidos y pedidos programados */
+  schedule: ScheduleRules;
 };
 
 export async function getSettings(): Promise<Settings> {
@@ -64,6 +67,14 @@ export async function getSettings(): Promise<Settings> {
         ? { lat: Number(m.cafe_lat), lng: Number(m.cafe_lng) }
         : null,
     cafe_location_manual: m.cafe_location_manual === "1",
+    schedule: {
+      enabled: m.sched_enabled !== "0",
+      days: m.sched_days ?? "1,2,3,4,5,6",
+      open: /^\d{2}:\d{2}$/.test(m.sched_open ?? "") ? m.sched_open : "08:00",
+      close: /^\d{2}:\d{2}$/.test(m.sched_close ?? "") ? m.sched_close : "20:00",
+      prepMinutes: Math.min(Math.max(Number(m.sched_prep ?? 20), 0), 240),
+      daysAhead: Math.min(Math.max(Number(m.sched_ahead ?? 1), 0), 6),
+    },
     ntfy: {
       server: m.ntfy_server || "https://ntfy.sh",
       topic: m.ntfy_topic ?? "",

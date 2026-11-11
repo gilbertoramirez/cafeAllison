@@ -17,6 +17,8 @@ export type PlannerOrder = {
   paid: boolean;
   items: string;
   createdAt: string;
+  /** "Hoy 8:15" si es programado */
+  scheduled?: string | null;
 };
 
 const STATUS: Partial<Record<OrderStatus, { label: string; cls: string }>> = {
@@ -154,6 +156,9 @@ export default function RoutePlanner({
                     📍 {o.address}
                     {o.km != null ? ` · ${o.km} km` : ""}
                   </span>
+                  {o.scheduled && (
+                    <span className="block text-xs font-bold text-amber-800">⏰ Programado: {o.scheduled}</span>
+                  )}
                   <span className="block truncate text-xs text-cafe-500">{o.items}</span>
                 </span>
                 <span className="text-right text-sm">

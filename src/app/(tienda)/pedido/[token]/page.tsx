@@ -1,3 +1,4 @@
+import { slotLabel } from "@/lib/schedule";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import LiveUpdates from "@/components/LiveUpdates";
@@ -75,6 +76,11 @@ export default async function OrderPage({
       <div>
         <h1 className="text-2xl font-bold">Pedido {orderCode(order.id)}</h1>
         <p className="text-sm text-cafe-600">{dateTime(order.created_at)}</p>
+        {order.scheduled_for && (
+          <p className="mt-2 inline-block rounded-lg bg-amber-100 px-3 py-1 font-semibold text-amber-900">
+            ⏰ {order.delivery_type === "domicilio" ? "Entrega programada" : "Para recoger"}: {slotLabel(order.scheduled_for)}
+          </p>
+        )}
       </div>
 
       {sp.pago === "ok" && order.payment_status === "pagado" && (

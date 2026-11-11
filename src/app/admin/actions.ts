@@ -23,6 +23,7 @@ import { sendNtfy } from "@/lib/notify";
 import { isShortMapsLink, parseCoords, resolveShortMapsLink } from "@/lib/coords";
 import { markDelivered, markOnTheWay, planRoute, type RouteResult } from "@/lib/deliveryRoute";
 import { hashPin, validPin } from "@/lib/drivers";
+import { addMovement, CashError, closeSession, openSession } from "@/lib/cash";
 import { normalizePhone, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import { loyaltyStatus } from "@/lib/loyalty";
 import { ticketsByIds } from "@/lib/tickets-server";
@@ -727,4 +728,65 @@ export async function deleteDriver(id: number) {
   await requireAdmin();
   await run("DELETE FROM drivers WHERE id = ?", [id]);
   driversBack("Repartidor eliminado.");
+}
+
+export async function saveScheduleSettings(formData: FormData) {
+  await requireAdmin();
+  const time = (k: string, fallback: string) => {
+    const v = str(formData, k);
+    return /^\d{2}:\d{2}$/.test(v) ? v : fallback;
+  };
+  const days = formData
+    .getAll("days")
+    .map((d) => Number(d))
+    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  await setSetting("sched_enabled", formData.get("enabled") ? "1" : "0");
+  await setSetting("sched_days", days.length === 7 ? "" : days.join(","));
+  await setSetting("sched_open", time("open", "08:00"));
+  await setSetting("sched_close", time("close", "20:00"));
+  await setSetting("sched_prep", String(Math.min(Math.max(Math.round(num(formData, "prep")), 0), 240)));
+  await setSetting("sched_ahead", String(Math.min(Math.max(int(formData, "ahead"), 0), 6)));
+  done();
+}
+
+// ---------- Corte de caja ----------
+
+function cashBack(params: Record<string, string>): never {
+  redirect(`/admin/caja?${new URLSearchParams(params).toString()}`);
+}
+
+export async function openCash(formData: FormData) {
+  await requireAdmin();
+  try {
+    await openSession(toCents(formData.get("opening")), str(formData, "note"));
+  } catch (e) {
+    if (e instanceof CashError) cashBack({ error: e.message });
+    throw e;
+  }
+  cashBack({ ok: "Caja abierta. ¡Buen turno!" });
+}
+
+export async function cashMovement(formData: FormData) {
+  await requireAdmin();
+  const kind = str(formData, "kind") === "entrada" ? "entrada" : "salida";
+  try {
+    await addMovement(kind, toCents(formData.get("amount")), str(formData, "reason"));
+  } catch (e) {
+    if (e instanceof CashError) cashBack({ error: e.message });
+    throw e;
+  }
+  cashBack({ ok: kind === "entrada" ? "Entrada registrada." : "Salida registrada." });
+}
+
+export async function closeCash(formData: FormData) {
+  await requireAdmin();
+  if (str(formData, "counted") === "") cashBack({ error: "Escribe cuánto efectivo contaste en el cajón." });
+  let id: number;
+  try {
+    id = await closeSession(toCents(formData.get("counted")), str(formData, "note"));
+  } catch (e) {
+    if (e instanceof CashError) cashBack({ error: e.message });
+    throw e;
+  }
+  cashBack({ id: String(id), ok: "Caja cerrada." });
 }

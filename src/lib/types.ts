@@ -65,6 +65,8 @@ export type Order = {
   dest_lng: number | null;
   /** repartidor que lo llevó */
   driver_id: number | null;
+  /** pedido programado: hora en que el cliente lo quiere (ISO) */
+  scheduled_for: string | null;
 };
 
 export type OrderItem = {

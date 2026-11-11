@@ -1,3 +1,4 @@
+import { slotLabel } from "@/lib/schedule";
 import { PageTitle } from "@/components/admin/ui";
 import RoutePlanner from "@/components/admin/RoutePlanner";
 import { all } from "@/lib/db";
@@ -40,6 +41,7 @@ export default async function DeliveryRoutePage() {
           paid: o.payment_status === "pagado",
           items: (items.get(o.id) ?? []).map((i) => `${i.qty} × ${i.name}`).join(", "),
           createdAt: o.created_at,
+          scheduled: o.scheduled_for ? slotLabel(o.scheduled_for) : null,
         }))}
       />
     </div>

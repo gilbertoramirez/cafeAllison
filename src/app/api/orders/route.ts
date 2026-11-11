@@ -9,6 +9,7 @@ import { createCheckoutSession } from "@/lib/payments";
 import { verifyRedeemCode } from "@/lib/loyalty";
 import { siteUrl } from "@/lib/url";
 import { onlyDigits } from "@/lib/format";
+import { isOpenNow, isValidSlot } from "@/lib/schedule";
 
 type Body = {
   items?: { productId: number; qty: number; note?: string }[];
@@ -26,6 +27,8 @@ type Body = {
   /** canjear la bebida gratis (requiere el código enviado al teléfono) */
   useReward?: boolean;
   loyaltyCode?: string;
+  /** hora programada (ISO) o vacío = lo antes posible */
+  scheduledFor?: string | null;
 };
 
 function bad(error: string, status = 400) {
@@ -42,6 +45,16 @@ export async function POST(req: Request) {
 
   const settings = await getSettings();
   if (!settings.store_open) return bad("Por ahora no estamos recibiendo pedidos.");
+
+  // Horario: "lo antes posible" solo con la cafetería abierta; si no, debe programarse
+  const sched = settings.schedule;
+  const scheduledFor = sched.enabled && body.scheduledFor ? String(body.scheduledFor) : null;
+  if (scheduledFor && !isValidSlot(sched, scheduledFor)) {
+    return bad("Ese horario ya no está disponible. Elige otra hora.");
+  }
+  if (sched.enabled && !scheduledFor && !isOpenNow(sched)) {
+    return bad("Ahora estamos cerrados. Programa tu pedido para cuando abramos.");
+  }
 
   const name = String(body.customerName ?? "").trim();
   const phone = String(body.phone ?? "").trim();
@@ -123,6 +136,7 @@ export async function POST(req: Request) {
   }
 
   // km y punto de entrega (para planear la ruta de reparto)
+  if (scheduledFor) await run("UPDATE orders SET scheduled_for = ? WHERE id = ?", [scheduledFor, order.id]);
   if (km !== null) {
     await run("UPDATE orders SET delivery_km = ?, dest_lat = ?, dest_lng = ? WHERE id = ?", [km, dest?.lat ?? null, dest?.lng ?? null, order.id]);
   }

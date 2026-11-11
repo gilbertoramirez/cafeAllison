@@ -1,3 +1,4 @@
+import { slotLabel } from "./schedule";
 import { money, waNumber } from "./format";
 import { orderCode } from "./orders";
 import type { Order, OrderItem } from "./types";
@@ -19,6 +20,7 @@ export function orderMessage(order: Order, items: OrderItem[], trackUrl: string)
     `*Total: ${money(order.total)}*`,
     "",
     `Nombre: ${order.customer_name}`,
+    order.scheduled_for ? `⏰ Programado para: ${slotLabel(order.scheduled_for)}` : null,
     order.delivery_type === "domicilio"
       ? `Entregar en: ${order.address}${order.postal_code ? `, CP ${order.postal_code}` : ""}`
       : "Paso a recogerlo",

@@ -1,5 +1,6 @@
 /** Avisos al celular con ntfy (https://ntfy.sh): pedidos nuevos y cada cambio de un pedido. */
 import { after } from "next/server";
+import { slotLabel } from "./schedule";
 import { all, get } from "./db";
 import { money } from "./format";
 import { getSettings } from "./settings";
@@ -96,6 +97,7 @@ async function sendOrderNotice(orderId: number, event: OrderEvent) {
       [orderId],
     );
     const who = [
+      o.scheduled_for ? `⏰ ${slotLabel(o.scheduled_for)}` : null,
       o.customer_name || (counter ? "Mostrador" : "Cliente"),
       o.delivery_type === "domicilio"
         ? "🛵 A domicilio"

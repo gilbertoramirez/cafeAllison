@@ -1,3 +1,4 @@
+import { slotLabel } from "@/lib/schedule";
 import { PageTitle } from "@/components/admin/ui";
 import { all } from "@/lib/db";
 import { dateTime, localDate, money, startOfLocalDay } from "@/lib/format";
@@ -98,6 +99,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                       ? "🧾 Venta en caja"
                       : `${o.channel === "whatsapp" ? "WhatsApp" : "Web"} · ${o.delivery_type === "domicilio" ? "🛵 Domicilio" : "🏪 Recoger"}`}
                   </p>
+                  {o.scheduled_for && (
+                    <p className="mt-1 inline-block rounded-md bg-amber-100 px-2 py-0.5 text-sm font-bold text-amber-900">
+                      ⏰ Programado: {slotLabel(o.scheduled_for)}
+                    </p>
+                  )}
                 </div>
                 <span className={`badge ${STATUS_COLOR[o.status]}`}>{ORDER_STATUS_LABEL[o.status]}</span>
               </header>

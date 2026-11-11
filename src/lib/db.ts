@@ -228,6 +228,26 @@ CREATE TABLE IF NOT EXISTS drivers (
   created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
 );
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS driver_id INTEGER;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_for TEXT;
+CREATE TABLE IF NOT EXISTS cash_sessions (
+  id SERIAL PRIMARY KEY,
+  opened_at TEXT NOT NULL,
+  opening_cash INTEGER NOT NULL DEFAULT 0,
+  open_note TEXT NOT NULL DEFAULT '',
+  closed_at TEXT,
+  counted_cash INTEGER,
+  expected_cash INTEGER,
+  close_note TEXT NOT NULL DEFAULT '',
+  summary TEXT
+);
+CREATE TABLE IF NOT EXISTS cash_movements (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL

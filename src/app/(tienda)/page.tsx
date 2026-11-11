@@ -5,17 +5,19 @@ import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { availableToday } from "@/lib/format";
 import { daysLabel, type Product } from "@/lib/types";
 import Shop from "@/components/Shop";
+import { getUpsellData } from "@/lib/upsell";
 import { ActiveOrderBanner } from "@/components/MyOrders";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [settings, products, delivery] = await Promise.all([
+  const [settings, products, delivery, upsell] = await Promise.all([
     getSettings(),
     all<Product>(
       "SELECT * FROM products WHERE active = 1 ORDER BY (SELECT MIN(p2.sort) FROM products p2 WHERE p2.category = products.category), category, sort, name",
     ),
     getDeliveryRules(),
+    getUpsellData(),
   ]);
 
   return (
@@ -62,7 +64,9 @@ export default async function Home() {
           stripe: stripeEnabled(),
           onlineFee: settings.online_fee,
           loyalty: settings.loyalty,
+          schedule: settings.schedule,
         }}
+        upsell={upsell}
       />
     </div>
   );

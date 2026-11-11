@@ -4,6 +4,7 @@
  * Se usa en el navegador; no depende del servidor.
  */
 import { dateTime, money } from "./format";
+import { slotLabel } from "./schedule";
 
 export type TicketData = {
   business: { name: string; address: string; phone: string };
@@ -26,6 +27,7 @@ export type TicketData = {
     service_fee?: number;
     total: number;
     created_at: string;
+    scheduled_for?: string | null;
   };
   items: { name: string; qty: number; unit_price: number; notes: string }[];
   /** p. ej. "Sellos: 7/10 · 1 bebida gratis" */
@@ -87,6 +89,7 @@ export function ticketLines(d: TicketData, cols: number): TicketLine[] {
   sep("=");
   add(`PEDIDO #${String(o.id).padStart(4, "0")}`, { align: "center", big: true, bold: true });
   add(dateTime(o.created_at), { align: "center" });
+  if (o.scheduled_for) add(`PROGRAMADO: ${slotLabel(o.scheduled_for)}`, { align: "center", bold: true });
   add(
     o.channel === "mostrador"
       ? "Venta en mostrador"

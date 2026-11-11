@@ -17,7 +17,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   return (
     <div className="flex flex-1 flex-col md:flex-row">
       {/* Escritorio: barra lateral */}
-      <aside className="hidden bg-cafe-900 text-cafe-100 md:block md:w-56 md:shrink-0">
+      <aside className="hidden bg-cafe-900 text-cafe-100 md:block md:w-56 md:shrink-0 print:hidden">
         <div className="p-4">
           <p className="font-semibold text-white">{settings.business_name}</p>
           <p className="text-xs text-cafe-300">Panel de administración</p>
@@ -29,7 +29,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       </aside>
 
       {/* Celular: encabezado compacto */}
-      <header className="sticky top-0 z-30 flex items-center justify-between bg-cafe-900 px-4 py-2.5 text-white md:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between bg-cafe-900 px-4 py-2.5 text-white md:hidden print:hidden">
         <p className="font-semibold">{settings.business_name}</p>
 
       </header>
@@ -45,11 +45,13 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       </main>
 
       {/* Una sola conexión en tiempo real por pestaña; indicador arriba a la derecha */}
-      <div className="fixed top-2.5 right-4 z-40 rounded-full bg-white/90 px-2.5 py-1 shadow-sm md:top-4 md:right-6">
+      <div className="fixed top-2.5 right-4 z-40 rounded-full bg-white/90 px-2.5 py-1 shadow-sm md:top-4 md:right-6 print:hidden">
         <LiveUpdates url="/api/live/admin" mode="admin" />
       </div>
 
-      <MobileTabBar activeOrders={activeOrders} logout={logout} />
+      <div className="print:hidden">
+        <MobileTabBar activeOrders={activeOrders} logout={logout} />
+      </div>
     </div>
   );
 }

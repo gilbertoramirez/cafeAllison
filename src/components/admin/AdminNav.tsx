@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/admin/pos", label: "Punto de venta", short: "Caja", icon: "🧾" },
   { href: "/admin/pedidos", label: "Pedidos", short: "Pedidos", icon: "🛵" },
   { href: "/admin/productos", label: "Menú", short: "Menú", icon: "☕" },
+  { href: "/admin/caja", label: "Corte de caja", short: "Corte", icon: "💰" },
   { href: "/admin/reparto", label: "Reparto", short: "Reparto", icon: "🗺️" },
   { href: "/admin/repartidores", label: "Repartidores", short: "Repartidores", icon: "🧑‍✈️" },
   { href: "/admin/inventario", label: "Inventario", short: "Inventario", icon: "📦" },

@@ -8,6 +8,8 @@ import { cardPricing, type OnlineFeeRules } from "@/lib/fees";
 import { CART_KEY, rememberOrder } from "@/lib/myOrders";
 import { normalizePhone, pickFreeLine, type LoyaltySettings, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import LoyaltyCard from "./LoyaltyCard";
+import type { UpsellData } from "@/lib/upsell";
+import { isOpenNow, slotDays, type ScheduleRules } from "@/lib/schedule";
 
 export type ShopProduct = {
   id: number;
@@ -36,6 +38,7 @@ type ShopSettings = {
   stripe: boolean;
   onlineFee: OnlineFeeRules;
   loyalty: LoyaltySettings;
+  schedule: ScheduleRules;
 };
 
 /** Una línea del pedido: mismo producto con distintas indicaciones = líneas distintas */
@@ -58,12 +61,50 @@ const CATEGORY_ICON: Record<string, string> = {
 const iconFor = (category: string) => CATEGORY_ICON[category] ?? "☕";
 const CUSTOMER_KEY = "cafe_customer_v1";
 
-export default function Shop({ products, settings }: { products: ShopProduct[]; settings: ShopSettings }) {
+const DRINK_CATEGORIES = new Set([
+  "Bebidas Calientes",
+  "Calientes Sin Café",
+  "Bebidas Frías",
+  "Frappés Especiales",
+  "Malteadas",
+  "Café",
+  "Sin Café",
+  "Barra Fría",
+]);
+const isDrinkCategory = (c: string) => DRINK_CATEGORIES.has(c);
+
+export default function Shop({
+  products,
+  settings,
+  upsell,
+}: {
+  products: ShopProduct[];
+  settings: ShopSettings;
+  upsell?: UpsellData;
+}) {
   const router = useRouter();
   const [cart, setCart] = useState<CartLine[]>([]);
   const [step, setStep] = useState<"menu" | "checkout">("menu");
   const [category, setCategory] = useState<string | null>(null); // null = vista de categorías
   const [detail, setDetail] = useState<ShopProduct[] | null>(null); // producto abierto (con sus tamaños)
+  const [justAdded, setJustAdded] = useState<string | null>(null); // para sugerir "¿Le agregas…?"
+  // ¿Para cuándo? (pedidos programados). La hora actual se toma en el navegador y se actualiza cada minuto.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now()); // eslint-disable-line react-hooks/set-state-in-effect
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const [when, setWhen] = useState<"asap" | "later" | null>(null);
+  const [slot, setSlot] = useState("");
+  const [slotDay, setSlotDay] = useState("");
+  const schedOn = settings.schedule.enabled;
+  const openNow = now === null || !schedOn || isOpenNow(settings.schedule, new Date(now));
+  const days = useMemo(() => (now === null ? [] : slotDays(settings.schedule, new Date(now))), [now, settings.schedule]);
+  const mode = when ?? (openNow ? "asap" : "later");
+  const activeDay = days.find((d) => d.ymd === slotDay) ?? days[0];
+  const chosenSlot = activeDay?.slots.some((s) => s.iso === slot) ? slot : (activeDay?.slots[0]?.iso ?? "");
+  const scheduleBlocked = schedOn && mode === "later" && !chosenSlot;
   const [loaded, setLoaded] = useState(false);
 
   // Datos del cliente
@@ -230,6 +271,42 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
   }, [products]);
   const current = groups.find((g) => g.category === category) ?? null;
 
+  // "¿Le agregas…?": lo que se compra junto con lo del carrito y, si no hay datos, lo más vendido
+  // del tipo complementario (con bebida → algo de comer; con comida → una bebida)
+  const byName = useMemo(() => {
+    const m = new Map<string, ShopProduct[]>();
+    for (const p of products) {
+      if (!m.has(p.name)) m.set(p.name, []);
+      m.get(p.name)!.push(p);
+    }
+    return m;
+  }, [products]);
+  function suggestionsFor(names: string[], exclude: Set<string>, max: number): ShopProduct[][] {
+    const out: string[] = [];
+    const ok = (n: string) => {
+      const v = byName.get(n);
+      return v && !exclude.has(n) && !out.includes(n) && v.some((p) => !p.soldOut && !p.notToday);
+    };
+    for (const n of names) for (const c of upsell?.companions[n] ?? []) if (out.length < max && ok(c)) out.push(c);
+    const cats = names.map((n) => byName.get(n)?.[0]?.category ?? "").filter(Boolean);
+    const hasDrink = cats.some(isDrinkCategory);
+    // Lo que le falta: si ya lleva bebida, algo de comer; si solo lleva comida, una bebida
+    const wantFood = hasDrink;
+    const wantDrink = !hasDrink;
+    const fits = (n: string) => {
+      const c = byName.get(n)?.[0]?.category ?? "";
+      return (wantFood && !isDrinkCategory(c)) || (wantDrink && isDrinkCategory(c));
+    };
+    for (const n of [...(upsell?.popular ?? []), ...byName.keys()]) if (out.length < max && fits(n) && ok(n)) out.push(n);
+    return out.map((n) => byName.get(n)!.filter((p) => !p.soldOut && !p.notToday));
+  }
+  function addSuggestion(variants: ShopProduct[]) {
+    if (variants.length === 1) {
+      addToCart(variants[0], 1, "");
+      setJustAdded(null);
+    } else setDetail(variants);
+  }
+
   // Mantiene visible la pestaña de la categoría activa
   useEffect(() => {
     document
@@ -364,6 +441,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
           lng: coords?.lng ?? null,
           notes,
           paymentMethod: payment,
+          scheduledFor: schedOn && mode === "later" ? chosenSlot : null,
           useReward: redeem.stage === "on",
           loyaltyCode: redeem.stage === "on" ? redeem.code : undefined,
           cashGiven: payment === "efectivo" && cashGiven ? Number(cashGiven) : null,
@@ -423,6 +501,23 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
               + Agregar más productos
             </button>
           </section>
+
+          {lines.length > 0 &&
+            (() => {
+              const names = [...lines].reverse().map((l) => l.p.name);
+              const sugg = suggestionsFor(names, new Set(names), 3);
+              if (!sugg.length) return null;
+              return (
+                <section className="card space-y-2">
+                  <h3 className="font-semibold">¿Le agregas algo más?</h3>
+                  <div className="grid grid-cols-3 gap-2">
+                    {sugg.map((v) => (
+                      <SuggestionCard key={v[0].name} variants={v} onAdd={() => addSuggestion(v)} vertical />
+                    ))}
+                  </div>
+                </section>
+              );
+            })()}
 
           <section className="card space-y-3">
             <h3 className="font-semibold">¿Cómo lo quieres recibir?</h3>
@@ -592,6 +687,62 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
             </div>
           </section>
 
+          {schedOn && (
+            <section className="card space-y-3">
+              <h3 className="font-semibold">¿Para cuándo?</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <Choice active={mode === "asap"} onClick={() => openNow && setWhen("asap")}>
+                  ⚡ Lo antes posible
+                  <span className="block text-xs font-normal opacity-75">
+                    {openNow ? `Listo en ~${settings.schedule.prepMinutes} min` : "Ahora estamos cerrados"}
+                  </span>
+                </Choice>
+                <Choice active={mode === "later"} onClick={() => setWhen("later")}>
+                  ⏰ Programar
+                  <span className="block text-xs font-normal opacity-75">Elige día y hora</span>
+                </Choice>
+              </div>
+              {mode === "later" &&
+                (days.length === 0 ? (
+                  <p className="rounded-lg bg-amber-50 p-2 text-sm text-amber-800">
+                    No hay horarios disponibles para programar por ahora.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {days.map((d) => (
+                        <button
+                          key={d.ymd}
+                          type="button"
+                          onClick={() => setSlotDay(d.ymd)}
+                          className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold ${
+                            activeDay?.ymd === d.ymd ? "bg-cafe-800 text-white" : "bg-cafe-50 ring-1 ring-cafe-200"
+                          }`}
+                        >
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="label" htmlFor="slot">
+                      {deliveryType === "domicilio" ? "Hora de entrega" : "Hora para recoger"}
+                    </label>
+                    <select id="slot" className="input" value={chosenSlot} onChange={(e) => setSlot(e.target.value)}>
+                      {activeDay?.slots.map((s) => (
+                        <option key={s.iso} value={s.iso}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                    {!openNow && (
+                      <p className="text-xs text-cafe-600">
+                        Abrimos de {settings.schedule.open} a {settings.schedule.close}. Tu pedido queda apartado para esa hora.
+                      </p>
+                    )}
+                  </div>
+                ))}
+            </section>
+          )}
+
           <section className="card space-y-3">
             <h3 className="font-semibold">Forma de pago</h3>
             <div className="grid gap-2 sm:grid-cols-3">
@@ -660,7 +811,7 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
 
           <button
             type="submit"
-            disabled={sending || lines.length === 0 || belowMin || deliveryBlocked}
+            disabled={sending || lines.length === 0 || belowMin || deliveryBlocked || scheduleBlocked}
             className={payment === "whatsapp" ? "btn-whatsapp w-full py-3 text-base" : "btn-primary w-full py-3 text-base"}
           >
             {sending
@@ -672,6 +823,18 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
                   : `Confirmar pedido · ${money(total)}`}
           </button>
         </form>
+        {detail && (
+          <ProductSheet
+            variants={detail}
+            open={settings.open}
+            qtyOf={qtyOf}
+            onClose={() => setDetail(null)}
+            onAdd={(p, qty, note) => {
+              addToCart(p, qty, note);
+              setDetail(null);
+            }}
+          />
+        )}
       </main>
     );
   }
@@ -783,15 +946,41 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
           onAdd={(p, qty, note) => {
             addToCart(p, qty, note);
             setDetail(null);
+            setJustAdded(p.name);
           }}
         />
       )}
+
+      {/* ¿Le agregas…? justo después de agregar algo */}
+      {justAdded && settings.open && !detail && (() => {
+        const inCart = new Set(lines.map((l) => l.p.name));
+        const sugg = suggestionsFor([justAdded], inCart, 2);
+        if (!sugg.length) return null;
+        return (
+          <div className="fixed inset-x-0 bottom-[calc(8.25rem+env(safe-area-inset-bottom))] z-20 px-3" role="status">
+            <div className="mx-auto max-w-md rounded-2xl bg-white p-3 shadow-xl ring-1 ring-cafe-100">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-semibold">✓ Agregado. ¿Le agregas…?</p>
+                <button className="px-1 text-lg leading-none text-cafe-500" aria-label="Cerrar" onClick={() => setJustAdded(null)}>
+                  ×
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {sugg.map((v) => (
+                  <SuggestionCard key={v[0].name} variants={v} onAdd={() => addSuggestion(v)} />
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {count > 0 && settings.open && !detail && (
         <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 p-3">
           <button
             onClick={() => {
               setStep("checkout");
+              setJustAdded(null);
               window.scrollTo({ top: 0 });
             }}
             className="mx-auto flex w-full max-w-md items-center justify-between rounded-full bg-cafe-800 py-3 pr-5 pl-3 text-white shadow-xl transition active:scale-[0.98]"
@@ -810,6 +999,33 @@ export default function Shop({ products, settings }: { products: ShopProduct[]; 
         </div>
       )}
     </main>
+  );
+}
+
+/** Producto sugerido ("¿Le agregas…?") con botón para agregarlo. */
+function SuggestionCard({ variants, onAdd, vertical }: { variants: ShopProduct[]; onAdd: () => void; vertical?: boolean }) {
+  const p = variants[0];
+  const from = Math.min(...variants.map((v) => v.menuPrice));
+  return (
+    <button
+      type="button"
+      onClick={onAdd}
+      className={`flex items-center gap-2 rounded-xl bg-cafe-50 p-2 text-left ring-1 ring-cafe-100 transition active:scale-[0.97] ${
+        vertical ? "flex-col text-center" : ""
+      }`}
+    >
+      <ProductImage p={p} size="sm" />
+      <span className="min-w-0 flex-1">
+        <span className="line-clamp-2 block text-xs leading-tight font-semibold">{p.name}</span>
+        <span className="block text-xs text-cafe-600">
+          {variants.length > 1 ? "Desde " : ""}
+          {money(from)}
+        </span>
+      </span>
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cafe-800 text-sm font-bold text-white" aria-hidden>
+        +
+      </span>
+    </button>
   );
 }
 

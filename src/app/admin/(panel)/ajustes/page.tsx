@@ -2,11 +2,13 @@ import { Field, PageTitle } from "@/components/admin/ui";
 import { centsToInput, money } from "@/lib/format";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { feeForDistance } from "@/lib/delivery";
+import { WEEKDAYS } from "@/lib/types";
 import CafeLocationInput from "@/components/admin/CafeLocationInput";
 import { onlinePrice } from "@/lib/fees";
 import { randomBytes } from "node:crypto";
 import {
   saveDeliverySettings,
+  saveScheduleSettings,
   saveLoyaltySettings,
   saveNtfySettings,
   saveOnlineFee,
@@ -76,6 +78,50 @@ export default async function SettingsPage() {
         <div className="sm:col-span-2">
           <button className="btn-primary">Guardar ajustes</button>
         </div>
+      </form>
+
+      <form action={saveScheduleSettings} className="card space-y-3 text-sm">
+        <h2 className="font-semibold">⏰ Horario y pedidos programados</h2>
+        <p className="text-cafe-600">
+          Fuera de este horario la tienda solo acepta pedidos programados. Los clientes eligen una hora cada 15 minutos.
+        </p>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" name="enabled" defaultChecked={s.schedule.enabled} /> Usar horario y permitir programar pedidos
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {WEEKDAYS.map((d, i) => (
+            <label key={d} className="flex items-center gap-1 rounded-lg bg-cafe-50 px-2 py-1">
+              <input
+                type="checkbox"
+                name="days"
+                value={i}
+                defaultChecked={!s.schedule.days.trim() || s.schedule.days.split(",").map(Number).includes(i)}
+              />
+              {d}
+            </label>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Field label="Abre">
+            <input name="open" type="time" step="900" className="input" defaultValue={s.schedule.open} required />
+          </Field>
+          <Field label="Cierra">
+            <input name="close" type="time" step="900" className="input" defaultValue={s.schedule.close} required />
+          </Field>
+          <Field label="Preparación (min)" hint="Tiempo mínimo para tener listo un pedido">
+            <input name="prep" type="number" min="0" max="240" className="input" defaultValue={s.schedule.prepMinutes} />
+          </Field>
+          <Field label="Programar hasta" hint="Días después de hoy">
+            <select name="ahead" className="input" defaultValue={String(s.schedule.daysAhead)}>
+              <option value="0">Solo hoy</option>
+              <option value="1">Hoy y mañana</option>
+              <option value="2">2 días</option>
+              <option value="3">3 días</option>
+              <option value="6">Una semana</option>
+            </select>
+          </Field>
+        </div>
+        <button className="btn-primary">Guardar horario</button>
       </form>
 
       <form action={saveDeliverySettings} className="card space-y-3 text-sm">
