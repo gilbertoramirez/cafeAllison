@@ -9,6 +9,7 @@ import { CART_KEY, rememberOrder } from "@/lib/myOrders";
 import { normalizePhone, pickFreeLine, type LoyaltySettings, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import LoyaltyCard from "./LoyaltyCard";
 import type { UpsellData } from "@/lib/upsell";
+import { iconFor } from "@/lib/categoryIcons";
 import { isOpenNow, slotDays, type ScheduleRules } from "@/lib/schedule";
 
 export type ShopProduct = {
@@ -44,21 +45,7 @@ type ShopSettings = {
 /** Una línea del pedido: mismo producto con distintas indicaciones = líneas distintas */
 type CartLine = { key: string; productId: number; qty: number; note: string };
 
-const CATEGORY_ICON: Record<string, string> = {
-  "Bebidas Calientes": "☕",
-  "Calientes Sin Café": "🍫",
-  "Bebidas Frías": "🧊",
-  Café: "☕",
-  "Sin Café": "🍫",
-  "Barra Fría": "🧊",
-  "Frappés Especiales": "🥤",
-  Malteadas: "🍓",
-  Postres: "🥐",
-  Snacks: "🥪",
-  Combos: "🍱",
-  "Snacks Especiales": "🍗",
-};
-const iconFor = (category: string) => CATEGORY_ICON[category] ?? "☕";
+
 const CUSTOMER_KEY = "cafe_customer_v1";
 
 const DRINK_CATEGORIES = new Set([
@@ -77,10 +64,13 @@ export default function Shop({
   products,
   settings,
   upsell,
+  categoryImages = {},
 }: {
   products: ShopProduct[];
   settings: ShopSettings;
   upsell?: UpsellData;
+  /** foto propia de cada categoría (si no hay, se usa la de uno de sus productos) */
+  categoryImages?: Record<string, string>;
 }) {
   const router = useRouter();
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -880,8 +870,12 @@ export default function Shop({
                 }}
                 className="group flex flex-col items-center gap-2 text-center"
               >
-                <span className="flex aspect-square w-full max-w-36 items-center justify-center rounded-full bg-cafe-100 text-5xl shadow-inner transition group-hover:scale-105 group-active:scale-95 sm:text-6xl">
-                  {iconFor(g.category)}
+                <span className="flex aspect-square w-full max-w-36 items-center justify-center overflow-hidden rounded-full bg-cafe-100 text-5xl shadow-inner transition group-hover:scale-105 group-active:scale-95 sm:text-6xl">
+                  {(() => {
+                    const photo = categoryImages[g.category] || g.items.flat().find((p) => p.image_url)?.image_url;
+                    // eslint-disable-next-line @next/next/no-img-element
+                    return photo ? <img src={photo} alt="" className="h-full w-full object-cover" /> : iconFor(g.category);
+                  })()}
                 </span>
                 <span className="text-sm font-semibold">{g.category}</span>
                 <span className="-mt-2 text-xs text-cafe-500">{g.items.length} productos</span>

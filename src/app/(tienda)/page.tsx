@@ -6,18 +6,20 @@ import { availableToday } from "@/lib/format";
 import { daysLabel, type Product } from "@/lib/types";
 import Shop from "@/components/Shop";
 import { getUpsellData } from "@/lib/upsell";
+import { categoryImages } from "@/lib/images";
 import { ActiveOrderBanner } from "@/components/MyOrders";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [settings, products, delivery, upsell] = await Promise.all([
+  const [settings, products, delivery, upsell, catImages] = await Promise.all([
     getSettings(),
     all<Product>(
-      "SELECT * FROM products WHERE active = 1 ORDER BY (SELECT MIN(p2.sort) FROM products p2 WHERE p2.category = products.category), category, sort, name",
+      "SELECT * FROM products WHERE active = 1 AND pos_only = 0 ORDER BY (SELECT MIN(p2.sort) FROM products p2 WHERE p2.category = products.category), category, sort, name",
     ),
     getDeliveryRules(),
     getUpsellData(),
+    categoryImages(),
   ]);
 
   return (
@@ -67,6 +69,7 @@ export default async function Home() {
           schedule: settings.schedule,
         }}
         upsell={upsell}
+        categoryImages={catImages}
       />
     </div>
   );

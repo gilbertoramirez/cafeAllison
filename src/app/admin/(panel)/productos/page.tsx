@@ -4,8 +4,9 @@ import { all, get } from "@/lib/db";
 import { centsToInput, money } from "@/lib/format";
 import { daysLabel, parseDays, productLabel, WEEKDAYS, type Product } from "@/lib/types";
 import { saveProduct, toggleProduct } from "../../actions";
-import ProductPhotoInput from "@/components/admin/ProductPhotoInput";
-import { blobEnabled } from "@/lib/images";
+import ProductPhotoInput, { CategoryPhotoInput } from "@/components/admin/ProductPhotoInput";
+import { iconFor } from "@/lib/categoryIcons";
+import { blobEnabled, categoryImages } from "@/lib/images";
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ id?: string; nuevo?: string }> }) {
   const sp = await searchParams;
@@ -13,10 +14,33 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const editing = sp.id ? await get<Product>("SELECT * FROM products WHERE id = ?", [Number(sp.id)]) : undefined;
   const showForm = Boolean(editing || sp.nuevo);
   const categories = [...new Set(products.map((p) => p.category))];
+  const catImages = await categoryImages();
+  // Categorías que se ven en la tienda y la foto de producto que usarían si no tienen una propia
+  const storeCategories = [...new Set(products.filter((p) => p.active && !p.pos_only).map((p) => p.category))];
+  const productPhoto = (c: string) => products.find((p) => p.category === c && p.active && !p.pos_only && p.image_url)?.image_url ?? "";
 
   return (
     <div className="space-y-5">
       <PageTitle actions={<Link href="?nuevo=1" className="btn-primary">+ Agregar producto</Link>}>Menú</PageTitle>
+
+      <details className="card">
+        <summary className="cursor-pointer font-semibold">🖼️ Fotos de las categorías (los círculos de la tienda)</summary>
+        <p className="mt-2 text-sm text-cafe-600">
+          Toca un círculo para tomar o subir su foto. Si una categoría no tiene foto propia, se usa la de uno de sus productos.
+        </p>
+        <div className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-5 lg:grid-cols-8">
+          {storeCategories.map((c) => (
+            <CategoryPhotoInput
+              key={c}
+              category={c}
+              defaultUrl={catImages[c] ?? ""}
+              fallbackUrl={productPhoto(c)}
+              icon={iconFor(c)}
+              enabled={blobEnabled()}
+            />
+          ))}
+        </div>
+      </details>
 
       {showForm && (
         <form action={saveProduct} className="card grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
@@ -86,6 +110,10 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             <input type="checkbox" name="active" defaultChecked={editing ? Boolean(editing.active) : true} />
             Visible en el menú
           </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="pos_only" defaultChecked={Boolean(editing?.pos_only)} />
+            Solo en caja (no aparece en la tienda en línea)
+          </label>
           <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
             <button className="btn-primary">Guardar</button>
             <Link href="/admin/productos" className="btn-secondary">
@@ -125,6 +153,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                     {productLabel(p)}
                     {p.available_days && <span className="badge ml-2 bg-amber-50 text-amber-800">{daysLabel(p.available_days)}</span>}
                     {!p.active && <span className="badge ml-2 bg-gray-100">Oculto</span>}
+                    {Boolean(p.pos_only) && <span className="badge ml-2 bg-indigo-50 text-indigo-800">Solo caja</span>}
                   </td>
                   <td className="hidden sm:table-cell">{p.category}</td>
                   <td className="text-right tabular-nums">{money(p.price)}</td>

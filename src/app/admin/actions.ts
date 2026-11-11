@@ -24,7 +24,7 @@ import { isShortMapsLink, parseCoords, resolveShortMapsLink } from "@/lib/coords
 import { markDelivered, markOnTheWay, planRoute, type RouteResult } from "@/lib/deliveryRoute";
 import { hashPin, validPin } from "@/lib/drivers";
 import { addMovement, CashError, closeSession, openSession } from "@/lib/cash";
-import { setProductPhoto } from "@/lib/images";
+import { setCategoryPhoto, setProductPhoto } from "@/lib/images";
 import { normalizePhone, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import { loyaltyStatus } from "@/lib/loyalty";
 import { ticketsByIds } from "@/lib/tickets-server";
@@ -202,12 +202,13 @@ export async function saveProduct(formData: FormData) {
     str(formData, "image_url"),
     formData.get("active") ? 1 : 0,
     int(formData, "sort"),
+    formData.get("pos_only") ? 1 : 0,
   ];
   const imageUrl = str(formData, "image_url");
   if (id) {
     const prev = await get<{ image_url: string }>("SELECT image_url FROM products WHERE id = ?", [id]);
     await run(
-      `UPDATE products SET name=?, icon=?, size=?, available_days=?, description=?, category=?, price=?, cost=?, track_stock=?, min_stock=?, image_url=?, active=?, sort=? WHERE id=?`,
+      `UPDATE products SET name=?, icon=?, size=?, available_days=?, description=?, category=?, price=?, cost=?, track_stock=?, min_stock=?, image_url=?, active=?, sort=?, pos_only=? WHERE id=?`,
       [...values, id],
     );
     // Foto nueva o quitada: se aplica a todos los tamaños y se borra la anterior si ya nadie la usa
@@ -219,8 +220,8 @@ export async function saveProduct(formData: FormData) {
       : await get<{ image_url: string }>("SELECT image_url FROM products WHERE name = ? AND image_url <> '' LIMIT 1", [name]);
     if (sibling) values[10] = sibling.image_url;
     await run(
-      `INSERT INTO products (name, icon, size, available_days, description, category, price, cost, track_stock, min_stock, image_url, active, sort, stock)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO products (name, icon, size, available_days, description, category, price, cost, track_stock, min_stock, image_url, active, sort, pos_only, stock)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [...values, int(formData, "stock")],
     );
   }
@@ -805,5 +806,11 @@ export async function closeCash(formData: FormData) {
 export async function removeProductPhoto(productId: number) {
   await requireAdmin();
   await setProductPhoto(Number(productId), "");
+  done();
+}
+
+export async function removeCategoryPhoto(category: string) {
+  await requireAdmin();
+  await setCategoryPhoto(String(category), "");
   done();
 }

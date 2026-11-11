@@ -78,7 +78,9 @@ export async function createOrder(input: NewOrderInput): Promise<Order> {
 
     for (const [id, qty] of perProduct) {
       const p = products.get(id);
-      if (!p || !p.active) throw new OrderError("Uno de los productos ya no está disponible.");
+      if (!p || !p.active || (p.pos_only && input.channel !== "mostrador")) {
+        throw new OrderError("Uno de los productos ya no está disponible.");
+      }
       if (input.enforceDays && !availableToday(p.available_days)) {
         throw new OrderError(`"${productLabel(p)}" solo está disponible: ${daysLabel(p.available_days)}.`);
       }

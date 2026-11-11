@@ -109,10 +109,32 @@ export async function setProductPhoto(productId: number, url: string) {
 export async function cleanupImages(urls: string[]) {
   const ours = urls.filter((u) => isOurBlob(u));
   if (!ours.length || !blobEnabled()) return;
+  const marks = ours.map(() => "?").join(",");
   const used = await all<{ image_url: string }>(
-    `SELECT DISTINCT image_url FROM products WHERE image_url IN (${ours.map(() => "?").join(",")})`,
-    ours,
+    `SELECT image_url FROM products WHERE image_url IN (${marks})
+     UNION SELECT image_url FROM category_images WHERE image_url IN (${marks})`,
+    [...ours, ...ours],
   );
   const orphan = ours.filter((u) => !used.some((x) => x.image_url === u));
   if (orphan.length) await del(orphan.map(unproxy)).catch((e) => console.error("blob", e));
+}
+
+/** Pone (o quita, con url vacío) la foto de una categoría del menú. */
+export async function setCategoryPhoto(category: string, url: string) {
+  const old = await get<{ image_url: string }>("SELECT image_url FROM category_images WHERE category = ?", [category]);
+  if (url) {
+    await run(
+      `INSERT INTO category_images (category, image_url) VALUES (?, ?)
+       ON CONFLICT (category) DO UPDATE SET image_url = excluded.image_url`,
+      [category, url],
+    );
+  } else {
+    await run("DELETE FROM category_images WHERE category = ?", [category]);
+  }
+  if (old && old.image_url !== url) await cleanupImages([old.image_url]);
+}
+
+export async function categoryImages(): Promise<Record<string, string>> {
+  const rows = await all<{ category: string; image_url: string }>("SELECT category, image_url FROM category_images");
+  return Object.fromEntries(rows.map((r) => [r.category, r.image_url]));
 }

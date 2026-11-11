@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS products (
 ALTER TABLE products ADD COLUMN IF NOT EXISTS size TEXT NOT NULL DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS available_days TEXT NOT NULL DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS icon TEXT NOT NULL DEFAULT '';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS pos_only INTEGER NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS supplies (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -247,6 +248,10 @@ CREATE TABLE IF NOT EXISTS cash_movements (
   amount INTEGER NOT NULL,
   reason TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+);
+CREATE TABLE IF NOT EXISTS category_images (
+  category TEXT PRIMARY KEY,
+  image_url TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
@@ -435,6 +440,12 @@ async function init(b: Backend) {
         "INSERT INTO settings (key, value) VALUES ('menu_version', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
         [MENU_VERSION],
       );
+    }
+    // Una sola vez: los descuentos son solo para la caja (no se ven en la tienda en línea)
+    const [posOnlyMig] = await q<{ value: string }>("SELECT value FROM settings WHERE key = 'pos_only_v1'");
+    if (!posOnlyMig) {
+      await q("UPDATE products SET pos_only = 1 WHERE name ILIKE 'descuento%'");
+      await q("INSERT INTO settings (key, value) VALUES ('pos_only_v1', '1') ON CONFLICT (key) DO NOTHING");
     }
     // Una sola vez: quitar los productos de prueba del primer menú que quedaron ocultos.
     // Sin ventas se borran (con sus movimientos); con ventas quedan ocultos y fuera del inventario.

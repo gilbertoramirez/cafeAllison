@@ -14,6 +14,8 @@ export type Product = {
   image_url: string;
   active: number;
   sort: number;
+  /** 1 = solo se vende en la caja (no aparece en la tienda en línea) */
+  pos_only: number;
 };
 
 export type Supply = {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAdmin } from "@/lib/auth";
 import { get } from "@/lib/db";
-import { blobEnabled, IMAGE_TYPES, ImageUploadError, MAX_IMAGE_BYTES, setProductPhoto, uploadProductImage } from "@/lib/images";
+import { blobEnabled, IMAGE_TYPES, ImageUploadError, MAX_IMAGE_BYTES, setCategoryPhoto, setProductPhoto, uploadProductImage } from "@/lib/images";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +25,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "El archivo debe ser una foto (JPG, PNG o WebP)." }, { status: 400 });
   }
   if (file.size > MAX_IMAGE_BYTES) return NextResponse.json({ error: "La foto es demasiado pesada." }, { status: 413 });
+  const category = String(form.get("category") ?? "").trim().slice(0, 80);
   const productId = Number(form.get("productId")) || null;
   const product = productId ? await get<{ name: string }>("SELECT name FROM products WHERE id = ?", [productId]) : null;
-  const name = product?.name ?? String(form.get("name") ?? "producto");
+  const name = product?.name ?? (category ? `categoria-${category}` : String(form.get("name") ?? "producto"));
   try {
     const url = await uploadProductImage(file, name);
+    if (category) {
+      await setCategoryPhoto(category, url);
+      return NextResponse.json({ url, applied: true });
+    }
     if (product && productId) await setProductPhoto(productId, url);
     return NextResponse.json({ url, applied: Boolean(product) });
   } catch (e) {
