@@ -4,6 +4,8 @@ import { all, get } from "@/lib/db";
 import { centsToInput, money } from "@/lib/format";
 import { daysLabel, parseDays, productLabel, WEEKDAYS, type Product } from "@/lib/types";
 import { saveProduct, toggleProduct } from "../../actions";
+import ProductPhotoInput from "@/components/admin/ProductPhotoInput";
+import { blobEnabled } from "@/lib/images";
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ id?: string; nuevo?: string }> }) {
   const sp = await searchParams;
@@ -49,8 +51,13 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           <Field label="Costo por unidad ($)" hint="Lo que te cuesta prepararlo. Se usa para calcular la ganancia.">
             <input name="cost" type="number" step="0.01" min="0" className="input" defaultValue={editing ? centsToInput(editing.cost) : ""} />
           </Field>
-          <Field label="URL de imagen (opcional)" className="lg:col-span-2">
-            <input name="image_url" type="url" className="input" defaultValue={editing?.image_url} placeholder="https://…" />
+          <Field label="Foto (opcional)" hint="Cuadrada y con fondo limpio se ve mejor. Se usa en todos los tamaños." className="col-span-2">
+            <ProductPhotoInput
+              productId={editing?.id ?? null}
+              productName={editing?.name ?? ""}
+              defaultUrl={editing?.image_url ?? ""}
+              enabled={blobEnabled()}
+            />
           </Field>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="track_stock" defaultChecked={Boolean(editing?.track_stock)} />
@@ -107,9 +114,14 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
               return (
                 <tr key={p.id} className={p.active ? "" : "opacity-50"}>
                   <td className="font-medium">
-                    <span className="mr-1.5" aria-hidden>
-                      {p.icon}
-                    </span>
+                    {p.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.image_url} alt="" className="mr-1.5 inline-block h-7 w-7 rounded-full object-cover align-middle" />
+                    ) : (
+                      <span className="mr-1.5" aria-hidden>
+                        {p.icon}
+                      </span>
+                    )}
                     {productLabel(p)}
                     {p.available_days && <span className="badge ml-2 bg-amber-50 text-amber-800">{daysLabel(p.available_days)}</span>}
                     {!p.active && <span className="badge ml-2 bg-gray-100">Oculto</span>}

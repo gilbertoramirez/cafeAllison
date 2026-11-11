@@ -24,6 +24,7 @@ import { isShortMapsLink, parseCoords, resolveShortMapsLink } from "@/lib/coords
 import { markDelivered, markOnTheWay, planRoute, type RouteResult } from "@/lib/deliveryRoute";
 import { hashPin, validPin } from "@/lib/drivers";
 import { addMovement, CashError, closeSession, openSession } from "@/lib/cash";
+import { setProductPhoto } from "@/lib/images";
 import { normalizePhone, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import { loyaltyStatus } from "@/lib/loyalty";
 import { ticketsByIds } from "@/lib/tickets-server";
@@ -202,12 +203,21 @@ export async function saveProduct(formData: FormData) {
     formData.get("active") ? 1 : 0,
     int(formData, "sort"),
   ];
+  const imageUrl = str(formData, "image_url");
   if (id) {
+    const prev = await get<{ image_url: string }>("SELECT image_url FROM products WHERE id = ?", [id]);
     await run(
       `UPDATE products SET name=?, icon=?, size=?, available_days=?, description=?, category=?, price=?, cost=?, track_stock=?, min_stock=?, image_url=?, active=?, sort=? WHERE id=?`,
       [...values, id],
     );
+    // Foto nueva o quitada: se aplica a todos los tamaños y se borra la anterior si ya nadie la usa
+    if (prev && prev.image_url !== imageUrl) await setProductPhoto(id, imageUrl);
   } else {
+    // Un tamaño nuevo de un producto que ya tiene foto la hereda
+    const sibling = imageUrl
+      ? null
+      : await get<{ image_url: string }>("SELECT image_url FROM products WHERE name = ? AND image_url <> '' LIMIT 1", [name]);
+    if (sibling) values[10] = sibling.image_url;
     await run(
       `INSERT INTO products (name, icon, size, available_days, description, category, price, cost, track_stock, min_stock, image_url, active, sort, stock)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -789,4 +799,11 @@ export async function closeCash(formData: FormData) {
     throw e;
   }
   cashBack({ id: String(id), ok: "Caja cerrada." });
+}
+
+/** Quita la foto del producto (y de sus tamaños) y la borra del almacenamiento si ya nadie la usa. */
+export async function removeProductPhoto(productId: number) {
+  await requireAdmin();
+  await setProductPhoto(Number(productId), "");
+  done();
 }
