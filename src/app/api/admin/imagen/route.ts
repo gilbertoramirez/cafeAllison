@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAdmin } from "@/lib/auth";
 import { get } from "@/lib/db";
-import { blobEnabled, IMAGE_TYPES, MAX_IMAGE_BYTES, setProductPhoto, uploadProductImage } from "@/lib/images";
+import { blobEnabled, IMAGE_TYPES, ImageUploadError, MAX_IMAGE_BYTES, setProductPhoto, uploadProductImage } from "@/lib/images";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +34,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ url, applied: Boolean(product) });
   } catch (e) {
     console.error("blob", e);
-    return NextResponse.json({ error: "No se pudo guardar la foto. Intenta de nuevo." }, { status: 502 });
+    const message = e instanceof ImageUploadError ? e.message : `No se pudo guardar la foto. Detalle: ${e instanceof Error ? e.message : e}`;
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }

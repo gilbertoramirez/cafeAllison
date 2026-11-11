@@ -2,15 +2,22 @@
  * Fotos de productos en Vercel Blob (almacenamiento de archivos aparte de la base de datos).
  * En la base solo se guarda el link de la foto.
  */
-import { del, put } from "@vercel/blob";
+import { BlobAccessError, BlobError, BlobStoreNotFoundError, BlobStoreSuspendedError, del, get as getBlob, put } from "@vercel/blob";
 import { all, get, run } from "./db";
+import { setSetting } from "./settings";
+
+/** Fotos de un almacenamiento privado: la página las sirve en /api/foto?u=… */
+const PROXY = "/api/foto?u=";
+export const proxiedUrl = (blobUrl: string) => PROXY + encodeURIComponent(blobUrl);
+const unproxy = (url: string) => (url.startsWith(PROXY) ? decodeURIComponent(url.slice(PROXY.length)) : url);
 
 export function blobEnabled() {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 }
 
 /** ¿El link es una foto que subimos nosotros (y por lo tanto la podemos borrar)? */
-function isOurBlob(url: string) {
+export function isOurBlob(link: string) {
+  const url = unproxy(link);
   try {
     const u = new URL(url);
     if (u.hostname.endsWith(".public.blob.vercel-storage.com") || u.hostname.endsWith(".blob.vercel-storage.com")) return true;
@@ -33,16 +40,57 @@ const slug = (s: string) =>
 export const MAX_IMAGE_BYTES = 1_500_000;
 export const IMAGE_TYPES = ["image/webp", "image/jpeg", "image/png"];
 
-/** Sube una foto (ya comprimida en el navegador) y devuelve su link público. */
+export class ImageUploadError extends Error {}
+
+/** Mensaje claro según el error que devuelve Vercel Blob. */
+function explain(e: unknown): string {
+  const detail = e instanceof Error ? e.message : String(e);
+  if (e instanceof BlobAccessError) {
+    return `Vercel rechazó el acceso al almacenamiento de fotos. Revisa que el Blob esté conectado a este proyecto (Production) y vuelve a publicar con Redeploy. Detalle: ${detail}`;
+  }
+  if (e instanceof BlobStoreNotFoundError) return `No se encontró el almacenamiento de fotos (¿se borró?). Detalle: ${detail}`;
+  if (e instanceof BlobStoreSuspendedError) return `El almacenamiento de fotos está suspendido en Vercel (revisa tu plan o límites). Detalle: ${detail}`;
+  return `No se pudo guardar la foto. Detalle: ${detail}`;
+}
+
+/**
+ * Sube una foto (ya comprimida en el navegador) y devuelve el link para mostrarla.
+ * Funciona con almacenamiento público (link directo) o privado (la página la sirve).
+ */
 export async function uploadProductImage(file: Blob, name: string): Promise<string> {
   const ext = file.type === "image/webp" ? "webp" : file.type === "image/png" ? "png" : "jpg";
-  const r = await put(`productos/${slug(name)}.${ext}`, file, {
-    access: "public",
-    contentType: file.type,
-    addRandomSuffix: true,
-    cacheControlMaxAge: 60 * 60 * 24 * 365,
-  });
-  return r.url;
+  const pathname = `productos/${slug(name)}.${ext}`;
+  const opts = { contentType: file.type, addRandomSuffix: true, cacheControlMaxAge: 60 * 60 * 24 * 365 };
+  const mode = (await get<{ value: string }>("SELECT value FROM settings WHERE key = 'blob_access'"))?.value;
+  if (mode !== "private") {
+    try {
+      return (await put(pathname, file, { ...opts, access: "public" })).url;
+    } catch (e) {
+      // Un almacenamiento privado no acepta fotos públicas: se intenta como privada
+      if (!(e instanceof BlobError) || e instanceof BlobStoreNotFoundError || e instanceof BlobStoreSuspendedError) {
+        throw new ImageUploadError(explain(e));
+      }
+      try {
+        const r = await put(pathname, file, { ...opts, access: "private" });
+        await setSetting("blob_access", "private");
+        return proxiedUrl(r.url);
+      } catch {
+        throw new ImageUploadError(explain(e));
+      }
+    }
+  }
+  try {
+    return proxiedUrl((await put(pathname, file, { ...opts, access: "private" })).url);
+  } catch (e) {
+    throw new ImageUploadError(explain(e));
+  }
+}
+
+/** Lee una foto de un almacenamiento privado (para /api/foto). */
+export async function readPrivateImage(blobUrl: string) {
+  if (!isOurBlob(blobUrl) || !blobEnabled()) return null;
+  const r = await getBlob(blobUrl, { access: "private" });
+  return r && r.statusCode === 200 ? r : null;
 }
 
 /**
@@ -59,12 +107,12 @@ export async function setProductPhoto(productId: number, url: string) {
 
 /** Borra del almacenamiento las fotos nuestras que ya no usa ningún producto. */
 export async function cleanupImages(urls: string[]) {
-  const ours = urls.filter(isOurBlob);
+  const ours = urls.filter((u) => isOurBlob(u));
   if (!ours.length || !blobEnabled()) return;
   const used = await all<{ image_url: string }>(
     `SELECT DISTINCT image_url FROM products WHERE image_url IN (${ours.map(() => "?").join(",")})`,
     ours,
   );
   const orphan = ours.filter((u) => !used.some((x) => x.image_url === u));
-  if (orphan.length) await del(orphan).catch((e) => console.error("blob", e));
+  if (orphan.length) await del(orphan.map(unproxy)).catch((e) => console.error("blob", e));
 }
