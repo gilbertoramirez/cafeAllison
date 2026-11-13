@@ -3,21 +3,22 @@
 Sistema para la cafetería con dos partes:
 
 **Tienda para clientes** (`/`)
-- Menú por categorías, carrito y pedido desde el celular.
-- Entrega **a domicilio** o **para recoger**. El envío se calcula por **código postal**: en *Ajustes* defines zonas (nombre, códigos postales y costo), el monto para **envío gratis** y el pedido mínimo. Si el código postal no está en ninguna zona, solo se permite recoger. Sin zonas configuradas se cobra un envío fijo.
-- Formas de pago: **pago en línea con Stripe** (tarjeta), **efectivo al recibir** (pregunta con cuánto paga para llevar cambio) o **pedido por WhatsApp** (se arma el mensaje con el pedido completo y se envía a tu número).
-- Página de **seguimiento del pedido** que se actualiza sola (Nuevo → Preparando → En camino → Entregado).
+- Menú por categorías con fotos, **buscador** que tolera acentos y errores de dedo ("capuchno", "frape"), carrito y pedido desde el celular.
+- Sugerencias **"¿Le agregas…?"** según lo que se compra junto.
+- Entrega **a domicilio** (costo por **distancia** con Google Maps: envío base, km extra, distancia máxima y envío gratis) o **para recoger**.
+- **Pedidos programados**: "lo antes posible" o día y hora dentro del horario; fuera de horario solo se programa.
+- Formas de pago: **tarjeta con Stripe** (la comisión va en el precio y el cargo fijo en su propio renglón), **efectivo** o **WhatsApp**.
+- Pestañas **Pedidos** (seguimiento en tiempo real y "Pedir de nuevo"), **Recompensas** (tarjeta de sellos) y **El café** (horario, ubicación, envíos).
 
 **Panel de administración** (`/admin`)
-- **Resumen**: ventas de hoy y del mes, utilidad neta, pagos pendientes, pedidos activos, inventario bajo y cuánto necesitas vender para cubrir lo que debes pagar este mes.
-- **Punto de venta**: caja para el mostrador, cobro en efectivo (con cálculo de cambio), tarjeta o transferencia.
-- **Pedidos**: pedidos en línea y de WhatsApp en tiempo real, cambio de estado, marcar como pagado, abrir la dirección en el mapa y avisar al cliente por WhatsApp.
-- **Menú**: alta y edición de productos, precio, **costo** (para calcular ganancia), margen, ocultar/mostrar.
-- **Inventario**: existencias de productos (pan, comida) e **insumos** (café, leche, vasos), registro de **resurtido** que crea el gasto automáticamente y actualiza el costo, ajustes por merma o conteo, historial de movimientos.
-- **Gastos**: renta, servicios, sueldos, resurtido, etc. Gastos **por pagar** con fecha de vencimiento y **recurrentes** (al pagar la renta se agenda la del siguiente mes).
-- **Finanzas**: ventas, costo de lo vendido, utilidad bruta y neta, flujo de efectivo, ventas por día, productos más vendidos, gastos por categoría y ventas por canal/forma de pago.
-- **Impresora de tickets** (en *Ajustes*, por dispositivo): Bluetooth o USB directo desde Chrome (ESC/POS, corta papel y abre cajón), app **RawBT** en Android, o el diálogo de impresión del navegador. Ticket de 58 u 80 mm, impresión automática al cobrar y de comandas al llegar pedidos en línea.
-- **Ajustes**: nombre, WhatsApp, horario, dirección, costo de envío, pedido mínimo, abrir/cerrar pedidos en línea.
+- **Resumen**, **Pedidos** en tiempo real, **Finanzas**, **Gastos** e **Inventario** editable en cada renglón.
+- **Punto de venta** con varios pedidos abiertos en pestañas, buscador, lealtad, impresión de tickets y cajón.
+- **Corte de caja**: fondo inicial, entradas/salidas, efectivo esperado contra contado e historial.
+- **Menú**: productos con **fotos desde el celular** (Vercel Blob), fotos por categoría, tamaños, días de venta y productos **solo en caja**.
+- **Reparto**: mejor ruta para varios pedidos a domicilio; **Repartidores** con su propia app en `/repartidor` (teléfono + PIN, solo ven pedidos a domicilio).
+- **Programa de lealtad**: 1 sello por día en compras desde el mínimo; con 10, bebida gratis de hasta 12 oz.
+- **Avisos al celular con ntfy** de pedidos nuevos y cambios.
+- **Ajustes**: datos del negocio, horario, envío por distancia, comisión en línea, lealtad, avisos e impresora.
 
 ## Empezar en tu computadora
 
