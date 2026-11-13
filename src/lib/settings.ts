@@ -2,7 +2,7 @@ import type { DeliveryRules } from "./delivery";
 import type { OnlineFeeRules } from "./fees";
 import type { LoyaltySettings } from "./loyaltyRules";
 import type { NtfySettings } from "./notify";
-import type { ScheduleRules } from "./schedule";
+import { parseWeek, type ScheduleRules } from "./schedule";
 import { all, run } from "./db";
 
 export type Settings = {
@@ -69,9 +69,7 @@ export async function getSettings(): Promise<Settings> {
     cafe_location_manual: m.cafe_location_manual === "1",
     schedule: {
       enabled: m.sched_enabled !== "0",
-      days: m.sched_days ?? "1,2,3,4,5,6",
-      open: /^\d{2}:\d{2}$/.test(m.sched_open ?? "") ? m.sched_open : "08:00",
-      close: /^\d{2}:\d{2}$/.test(m.sched_close ?? "") ? m.sched_close : "20:00",
+      week: parseWeek(m.sched_week),
       prepMinutes: Math.min(Math.max(Number(m.sched_prep ?? 20), 0), 240),
       daysAhead: Math.min(Math.max(Number(m.sched_ahead ?? 1), 0), 6),
     },

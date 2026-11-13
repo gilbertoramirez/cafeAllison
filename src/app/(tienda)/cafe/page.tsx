@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { money } from "@/lib/format";
 import { tariffText } from "@/lib/delivery";
+import { hoursText } from "@/lib/schedule";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { waLink } from "@/lib/whatsapp";
 
@@ -27,8 +28,8 @@ export default async function CafePage() {
       <h1 className="text-2xl font-bold">{settings.business_name}</h1>
 
       <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
-        {settings.hours && (
-          <Info icon="🕒" title="Horario" text={settings.hours} />
+        {(settings.schedule.enabled || settings.hours) && (
+          <Info icon="🕒" title="Horario" text={settings.schedule.enabled ? hoursText(settings.schedule) : settings.hours} />
         )}
         {settings.address && (
           <Info icon="📍" title="Dirección" text={settings.address} />

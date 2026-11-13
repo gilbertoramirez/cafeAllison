@@ -11,7 +11,7 @@ import LoyaltyCard from "./LoyaltyCard";
 import type { UpsellData } from "@/lib/upsell";
 import { iconFor } from "@/lib/categoryIcons";
 import { fuzzyFilter, normalize } from "@/lib/fuzzy";
-import { isOpenNow, slotDays, type ScheduleRules } from "@/lib/schedule";
+import { hoursText, isOpenNow, nextOpening, slotDays, type ScheduleRules } from "@/lib/schedule";
 
 export type ShopProduct = {
   id: number;
@@ -93,6 +93,7 @@ export default function Shop({
   const openNow = now === null || !schedOn || isOpenNow(settings.schedule, new Date(now));
   const days = useMemo(() => (now === null ? [] : slotDays(settings.schedule, new Date(now))), [now, settings.schedule]);
   const mode = when ?? (openNow ? "asap" : "later");
+  const opensAt = now === null || openNow ? null : nextOpening(settings.schedule, new Date(now));
   const activeDay = days.find((d) => d.ymd === slotDay) ?? days[0];
   const chosenSlot = activeDay?.slots.some((s) => s.iso === slot) ? slot : (activeDay?.slots[0]?.iso ?? "");
   const scheduleBlocked = schedOn && mode === "later" && !chosenSlot;
@@ -705,7 +706,7 @@ export default function Shop({
                 <Choice active={mode === "asap"} onClick={() => openNow && setWhen("asap")}>
                   ⚡ Lo antes posible
                   <span className="block text-xs font-normal opacity-75">
-                    {openNow ? `Listo en ~${settings.schedule.prepMinutes} min` : "Ahora estamos cerrados"}
+                    {openNow ? `Listo en ~${settings.schedule.prepMinutes} min` : opensAt ? `Cerrado · abrimos ${opensAt}` : "Ahora estamos cerrados"}
                   </span>
                 </Choice>
                 <Choice active={mode === "later"} onClick={() => setWhen("later")}>
@@ -746,7 +747,7 @@ export default function Shop({
                     </select>
                     {!openNow && (
                       <p className="text-xs text-cafe-600">
-                        Abrimos de {settings.schedule.open} a {settings.schedule.close}. Tu pedido queda apartado para esa hora.
+                        Horario: {hoursText(settings.schedule)}. Tu pedido queda apartado para la hora que elijas.
                       </p>
                     )}
                   </div>

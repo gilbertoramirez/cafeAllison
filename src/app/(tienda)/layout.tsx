@@ -1,7 +1,7 @@
 import Link from "next/link";
 import StoreTabs from "@/components/StoreTabs";
 import { getSettings } from "@/lib/settings";
-import { isOpenNow } from "@/lib/schedule";
+import { hoursText, isOpenNow, nextOpening } from "@/lib/schedule";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 export default async function StoreLayout({ children }: LayoutProps<"/">) {
   const settings = await getSettings();
   const openNow = !settings.schedule.enabled || isOpenNow(settings.schedule);
+  const hours = settings.schedule.enabled ? hoursText(settings.schedule) : settings.hours;
+  const opensAt = openNow ? null : nextOpening(settings.schedule);
   return (
     <div className="flex flex-1 flex-col bg-cafe-50/40 pb-[calc(4rem+env(safe-area-inset-bottom))]">
       <header className="bg-cafe-900 text-cafe-50">
@@ -17,9 +19,9 @@ export default async function StoreLayout({ children }: LayoutProps<"/">) {
             <span className="block truncate text-xl font-bold tracking-tight">
               {settings.business_name}
             </span>
-            {settings.hours && (
+            {hours && (
               <span className="block truncate text-xs text-cafe-200">
-                {settings.hours}
+                {hours}
               </span>
             )}
           </Link>
@@ -28,7 +30,7 @@ export default async function StoreLayout({ children }: LayoutProps<"/">) {
               !settings.store_open ? "bg-red-600 text-white" : openNow ? "bg-green-500/20 text-green-100" : "bg-amber-500/25 text-amber-100"
             }`}
           >
-            {!settings.store_open ? "Pedidos en pausa" : openNow ? "● Abierto" : "Cerrado · programa tu pedido"}
+            {!settings.store_open ? "Pedidos en pausa" : openNow ? "● Abierto" : opensAt ? `Cerrado · abrimos ${opensAt}` : "Cerrado"}
           </span>
         </div>
       </header>

@@ -743,18 +743,19 @@ export async function deleteDriver(id: number) {
 
 export async function saveScheduleSettings(formData: FormData) {
   await requireAdmin();
-  const time = (k: string, fallback: string) => {
+  const time = (k: string) => {
     const v = str(formData, k);
-    return /^\d{2}:\d{2}$/.test(v) ? v : fallback;
+    return /^\d{2}:\d{2}$/.test(v) ? v : "";
   };
-  const days = formData
-    .getAll("days")
-    .map((d) => Number(d))
-    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  // Turnos de cada día (0 = domingo); un turno sin las dos horas o al revés se ignora
+  const week = Array.from({ length: 7 }, (_, d) => {
+    if (!formData.get(`d${d}_on`)) return [];
+    return [1, 2]
+      .map((n) => ({ open: time(`d${d}_o${n}`), close: time(`d${d}_c${n}`) }))
+      .filter((sh) => sh.open && sh.close && sh.close > sh.open);
+  });
   await setSetting("sched_enabled", formData.get("enabled") ? "1" : "0");
-  await setSetting("sched_days", days.length === 7 ? "" : days.join(","));
-  await setSetting("sched_open", time("open", "08:00"));
-  await setSetting("sched_close", time("close", "20:00"));
+  await setSetting("sched_week", JSON.stringify(week));
   await setSetting("sched_prep", String(Math.min(Math.max(Math.round(num(formData, "prep")), 0), 240)));
   await setSetting("sched_ahead", String(Math.min(Math.max(int(formData, "ahead"), 0), 6)));
   done();

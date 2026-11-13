@@ -3,6 +3,7 @@ import { centsToInput, money } from "@/lib/format";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { feeForDistance } from "@/lib/delivery";
 import { WEEKDAYS } from "@/lib/types";
+import { hoursText } from "@/lib/schedule";
 import CafeLocationInput from "@/components/admin/CafeLocationInput";
 import { onlinePrice } from "@/lib/fees";
 import { randomBytes } from "node:crypto";
@@ -43,7 +44,7 @@ export default async function SettingsPage() {
             inputMode="tel"
           />
         </Field>
-        <Field label="Horario">
+        <Field label="Horario (texto)" hint="Solo se muestra si desactivas el horario por turnos de abajo.">
           <input name="hours" className="input" defaultValue={s.hours} />
         </Field>
         <Field label="Dirección" className="sm:col-span-2">
@@ -88,26 +89,34 @@ export default async function SettingsPage() {
         <label className="flex items-center gap-2">
           <input type="checkbox" name="enabled" defaultChecked={s.schedule.enabled} /> Usar horario y permitir programar pedidos
         </label>
-        <div className="flex flex-wrap gap-2">
-          {WEEKDAYS.map((d, i) => (
-            <label key={d} className="flex items-center gap-1 rounded-lg bg-cafe-50 px-2 py-1">
-              <input
-                type="checkbox"
-                name="days"
-                value={i}
-                defaultChecked={!s.schedule.days.trim() || s.schedule.days.split(",").map(Number).includes(i)}
-              />
-              {d}
-            </label>
-          ))}
+        <div className="space-y-2">
+          {[1, 2, 3, 4, 5, 6, 0].map((i) => {
+            const day = s.schedule.week[i] ?? [];
+            return (
+              <div key={i} className="grid grid-cols-[3.75rem_minmax(0,1fr)] items-center gap-2 rounded-lg bg-cafe-50 p-2 sm:grid-cols-[4.5rem_minmax(0,1fr)_minmax(0,1fr)]">
+                <label className="flex items-center gap-1 font-semibold">
+                  <input type="checkbox" name={`d${i}_on`} defaultChecked={day.length > 0} />
+                  {WEEKDAYS[i]}
+                </label>
+                <div className="flex min-w-0 items-center gap-1">
+                  <input name={`d${i}_o1`} type="time" step="900" className="input min-w-0 flex-1 px-2 py-1 text-sm" defaultValue={day[0]?.open ?? "08:00"} aria-label={`${WEEKDAYS[i]} turno 1 abre`} />
+                  <span>–</span>
+                  <input name={`d${i}_c1`} type="time" step="900" className="input min-w-0 flex-1 px-2 py-1 text-sm" defaultValue={day[0]?.close ?? "12:00"} aria-label={`${WEEKDAYS[i]} turno 1 cierra`} />
+                </div>
+                <div className="col-start-2 flex min-w-0 items-center gap-1 sm:col-start-3">
+                  <input name={`d${i}_o2`} type="time" step="900" className="input min-w-0 flex-1 px-2 py-1 text-sm" defaultValue={day[1]?.open ?? ""} aria-label={`${WEEKDAYS[i]} turno 2 abre`} />
+                  <span>–</span>
+                  <input name={`d${i}_c2`} type="time" step="900" className="input min-w-0 flex-1 px-2 py-1 text-sm" defaultValue={day[1]?.close ?? ""} aria-label={`${WEEKDAYS[i]} turno 2 cierra`} />
+                </div>
+              </div>
+            );
+          })}
+          <p className="text-xs text-cafe-600">
+            Marca los días que abres. El segundo turno es opcional (déjalo vacío si abres corrido). Así se ve en la tienda:{" "}
+            <b>{hoursText(s.schedule)}</b>
+          </p>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Abre">
-            <input name="open" type="time" step="900" className="input" defaultValue={s.schedule.open} required />
-          </Field>
-          <Field label="Cierra">
-            <input name="close" type="time" step="900" className="input" defaultValue={s.schedule.close} required />
-          </Field>
+        <div className="grid grid-cols-2 gap-3">
           <Field label="Preparación (min)" hint="Tiempo mínimo para tener listo un pedido">
             <input name="prep" type="number" min="0" max="240" className="input" defaultValue={s.schedule.prepMinutes} />
           </Field>
