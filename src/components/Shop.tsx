@@ -10,6 +10,7 @@ import { normalizePhone, pickFreeLine, type LoyaltySettings, type LoyaltyStatus 
 import LoyaltyCard from "./LoyaltyCard";
 import type { UpsellData } from "@/lib/upsell";
 import { iconFor } from "@/lib/categoryIcons";
+import { fuzzyFilter, normalize } from "@/lib/fuzzy";
 import { isOpenNow, slotDays, type ScheduleRules } from "@/lib/schedule";
 
 export type ShopProduct = {
@@ -260,6 +261,26 @@ export default function Shop({
     return [...m.entries()].map(([cat, byName]) => ({ category: cat, items: [...byName.values()] }));
   }, [products]);
   const current = groups.find((g) => g.category === category) ?? null;
+
+  // Búsqueda en todo el menú (tolera acentos y errores de dedo)
+  const [query, setQuery] = useState("");
+  const searching = normalize(query).length > 0;
+  const results = useMemo(
+    () =>
+      searching
+        ? fuzzyFilter(
+            groups.flatMap((g) => g.items),
+            query,
+            (v) => [
+              { text: v[0].name, weight: 1 },
+              { text: v[0].category, weight: 0.6 },
+              { text: v.map((x) => x.size).join(" "), weight: 0.5 },
+              { text: v[0].description, weight: 0.4 },
+            ],
+          )
+        : [],
+    [groups, query, searching],
+  );
 
   // "¿Le agregas…?": lo que se compra junto con lo del carrito y, si no hay datos, lo más vendido
   // del tipo complementario (con bebida → algo de comer; con comida → una bebida)
@@ -829,19 +850,89 @@ export default function Shop({
     );
   }
 
+  function productCard(variants: ShopProduct[]) {
+    const first = variants[0];
+    const from = Math.min(...variants.map((v) => v.menuPrice));
+    const inCart = variants.reduce((a, v) => a + qtyOf(v.id), 0);
+    const unavailable = variants.every((v) => v.soldOut) ? "Agotado" : first.notToday;
+    return (
+      <button
+        key={first.id}
+        onClick={() => setDetail(variants)}
+        className="group relative flex flex-col items-center text-center"
+      >
+        <ProductImage p={first} size="lg" dim={Boolean(unavailable)} />
+        {inCart > 0 && (
+          <span className="absolute top-1 right-[12%] flex h-7 min-w-7 items-center justify-center rounded-full bg-cafe-800 px-1.5 text-xs font-bold text-white ring-2 ring-white">
+            {inCart}
+          </span>
+        )}
+        <span className="mt-3 text-sm leading-tight font-semibold">{first.name}</span>
+        {first.size && (
+          <span className="mt-0.5 text-[11px] text-cafe-500">
+            {variants.map((v) => v.size.split(" ").pop()).join(" · ")}
+          </span>
+        )}
+        <span className="mt-1 text-xs text-cafe-600">
+          {unavailable ? (
+            <span className="font-medium text-amber-700">{unavailable}</span>
+          ) : (
+            <>
+              {variants.length > 1 ? "Desde " : ""}
+              {money(from)}
+            </>
+          )}
+        </span>
+      </button>
+    );
+  }
+
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 pb-24">
-      {/* Navegación de categorías, siempre visible */}
+      {/* Búsqueda y navegación de categorías, siempre visibles */}
       <nav className="sticky top-0 z-10 border-b border-cafe-100 bg-white/95 backdrop-blur">
+        <div className="mx-auto max-w-5xl px-4 pt-3">
+          <label className="relative block">
+            <span className="sr-only">Buscar en el menú</span>
+            <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-cafe-400" aria-hidden>
+              🔍
+            </span>
+            <input
+              type="text"
+              inputMode="search"
+              enterKeyHint="search"
+              autoComplete="off"
+              className="input rounded-full pr-10 pl-10"
+              placeholder="Busca un café, frappé, sándwich…"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                window.scrollTo({ top: 0 });
+              }}
+              onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Borrar búsqueda"
+                className="absolute top-1/2 right-2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-cafe-100 text-cafe-700"
+              >
+                ×
+              </button>
+            )}
+          </label>
+        </div>
         <div className="mx-auto flex max-w-5xl gap-5 overflow-x-auto px-4">
           {[{ category: null as string | null }, ...groups].map((g) => {
-            const active = category === g.category;
+            const active = !searching && category === g.category;
             return (
               <button
                 key={g.category ?? "menu"}
                 data-tab={g.category ?? "menu"}
                 onClick={() => {
                   setCategory(g.category);
+                  setQuery("");
                   window.scrollTo({ top: 0 });
                 }}
                 className={`shrink-0 border-b-2 py-3 text-sm font-semibold whitespace-nowrap transition ${
@@ -855,7 +946,40 @@ export default function Shop({
         </div>
       </nav>
 
-      {!current ? (
+      {searching ? (
+        /* Resultados de la búsqueda */
+        <section className="px-4 pt-4">
+          <p className="mb-4 text-sm text-cafe-600">
+            {results.length
+              ? `${results.length} resultado${results.length === 1 ? "" : "s"} para “${query.trim()}”`
+              : `No encontramos “${query.trim()}”.`}
+          </p>
+          {results.length ? (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4">
+              {results.map((variants) => productCard(variants))}
+            </div>
+          ) : (
+            <div className="space-y-3 text-center">
+              <p className="text-4xl">🔎</p>
+              <p className="text-sm text-cafe-700">Prueba con otra palabra o revisa las categorías:</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {groups.map((g) => (
+                  <button
+                    key={g.category}
+                    className="rounded-full bg-cafe-50 px-3 py-1 text-sm ring-1 ring-cafe-200"
+                    onClick={() => {
+                      setQuery("");
+                      setCategory(g.category);
+                    }}
+                  >
+                    {g.category}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      ) : !current ? (
         /* Vista principal: categorías en círculos */
         <section className="px-4 pt-6">
           <h2 className="mb-1 text-2xl font-bold">Menú</h2>
@@ -891,42 +1015,7 @@ export default function Shop({
           </button>
           <h2 className="mb-5 text-2xl font-bold">{current.category}</h2>
           <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4">
-            {current.items.map((variants) => {
-              const first = variants[0];
-              const from = Math.min(...variants.map((v) => v.menuPrice));
-              const inCart = variants.reduce((a, v) => a + qtyOf(v.id), 0);
-              const unavailable = variants.every((v) => v.soldOut) ? "Agotado" : first.notToday;
-              return (
-                <button
-                  key={first.id}
-                  onClick={() => setDetail(variants)}
-                  className="group relative flex flex-col items-center text-center"
-                >
-                  <ProductImage p={first} size="lg" dim={Boolean(unavailable)} />
-                  {inCart > 0 && (
-                    <span className="absolute top-1 right-[12%] flex h-7 min-w-7 items-center justify-center rounded-full bg-cafe-800 px-1.5 text-xs font-bold text-white ring-2 ring-white">
-                      {inCart}
-                    </span>
-                  )}
-                  <span className="mt-3 text-sm leading-tight font-semibold">{first.name}</span>
-                  {first.size && (
-                    <span className="mt-0.5 text-[11px] text-cafe-500">
-                      {variants.map((v) => v.size.split(" ").pop()).join(" · ")}
-                    </span>
-                  )}
-                  <span className="mt-1 text-xs text-cafe-600">
-                    {unavailable ? (
-                      <span className="font-medium text-amber-700">{unavailable}</span>
-                    ) : (
-                      <>
-                        {variants.length > 1 ? "Desde " : ""}
-                        {money(from)}
-                      </>
-                    )}
-                  </span>
-                </button>
-              );
-            })}
+            {current.items.map((variants) => productCard(variants))}
           </div>
         </section>
       )}

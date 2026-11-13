@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { posSale } from "@/app/admin/actions";
 import { money } from "@/lib/format";
+import { fuzzyFilter } from "@/lib/fuzzy";
 import SaleClosedDialog, { type SaleResult } from "./SaleClosedDialog";
 import LoyaltyCard from "@/components/LoyaltyCard";
 import { getLoyalty } from "@/app/admin/actions";
@@ -146,11 +147,13 @@ export default function PosTerminal({ products }: { products: P[] }) {
   const [sheet, setSheet] = useState(false); // ticket abierto en celular
 
   const categories = useMemo(() => ["Todo", ...new Set(products.map((p) => p.category))], [products]);
-  const shown = products.filter(
-    (p) =>
-      (category === "Todo" || p.category === category) &&
-      (!search || p.name.toLowerCase().includes(search.toLowerCase())),
-  );
+  // Al buscar se busca en todo el menú (tolera acentos y errores de dedo)
+  const shown = search.trim()
+    ? fuzzyFilter(products, search, (p) => [
+        { text: p.name, weight: 1 },
+        { text: p.category, weight: 0.6 },
+      ])
+    : products.filter((p) => category === "Todo" || p.category === category);
   const lines = Object.entries(ticket)
     .map(([id, qty]) => ({ p: products.find((x) => x.id === Number(id))!, qty }))
     .filter((l) => l.p && l.qty > 0);
