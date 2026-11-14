@@ -199,12 +199,15 @@ export async function saveProduct(formData: FormData) {
     toCents(formData.get("cost")),
     formData.get("track_stock") ? 1 : 0,
     int(formData, "min_stock"),
-    str(formData, "image_url"),
+    "", // foto: se pone abajo, ya validada
     formData.get("active") ? 1 : 0,
     int(formData, "sort"),
     formData.get("pos_only") ? 1 : 0,
   ];
-  const imageUrl = str(formData, "image_url");
+  // Link de la foto: completo (https://…), de nuestro almacenamiento privado (/api/foto?…) o vacío
+  const rawImage = str(formData, "image_url");
+  const imageUrl = /^https?:\/\/\S+$/i.test(rawImage) || rawImage.startsWith("/api/foto?u=") ? rawImage : "";
+  values[10] = imageUrl;
   if (id) {
     const prev = await get<{ image_url: string }>("SELECT image_url FROM products WHERE id = ?", [id]);
     await run(

@@ -133,6 +133,7 @@ export function productLabel(p: { name: string; size?: string }) {
 export function parseDays(days: string): number[] {
   return days
     .split(",")
+    .filter((d) => d.trim() !== "") // "" no es domingo: sin días = todos los días
     .map((d) => Number(d))
     .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
 }

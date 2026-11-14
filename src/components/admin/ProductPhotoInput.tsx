@@ -136,7 +136,9 @@ export default function ProductPhotoInput({
         <summary className="cursor-pointer">O pega el link de una foto</summary>
         <input
           name="image_url"
-          type="url"
+          type="text"
+          inputMode="url"
+          autoComplete="off"
           className="input mt-1"
           placeholder="https://…"
           value={url}

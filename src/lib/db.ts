@@ -441,6 +441,12 @@ async function init(b: Backend) {
         [MENU_VERSION],
       );
     }
+    // Una sola vez: productos que quedaron "solo domingo" por un error al editar (el café cierra en domingo)
+    const [daysMig] = await q<{ value: string }>("SELECT value FROM settings WHERE key = 'days_fix_v1'");
+    if (!daysMig) {
+      await q("UPDATE products SET available_days = '' WHERE available_days = '0'");
+      await q("INSERT INTO settings (key, value) VALUES ('days_fix_v1', '1') ON CONFLICT (key) DO NOTHING");
+    }
     // Una sola vez: los descuentos son solo para la caja (no se ven en la tienda en línea)
     const [posOnlyMig] = await q<{ value: string }>("SELECT value FROM settings WHERE key = 'pos_only_v1'");
     if (!posOnlyMig) {
