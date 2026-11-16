@@ -25,6 +25,7 @@ import { markDelivered, markOnTheWay, planRoute, type RouteResult } from "@/lib/
 import { hashPin, validPin } from "@/lib/drivers";
 import { addMovement, CashError, closeSession, openSession } from "@/lib/cash";
 import { setCategoryPhoto, setProductPhoto } from "@/lib/images";
+import { assignBarcode, findByBarcode, normalizeBarcode, type BarcodeMatch } from "@/lib/barcode";
 import { normalizePhone, type LoyaltyStatus } from "@/lib/loyaltyRules";
 import { loyaltyStatus } from "@/lib/loyalty";
 import { ticketsByIds } from "@/lib/tickets-server";
@@ -376,6 +377,7 @@ export async function saveSupply(formData: FormData) {
       // Si cambió la existencia, queda registrado como ajuste
       if (formData.has("qty")) await setQtyWithMovement(q, "supply", id, num(formData, "qty"));
     });
+    if (formData.has("barcode")) await setBarcodeField("supply", id, str(formData, "barcode"));
   } else {
     await run(
       "INSERT INTO supplies (name, unit, qty, min_qty, cost_per_unit) VALUES (?,?,?,?,?)",
@@ -407,6 +409,13 @@ async function setQtyWithMovement(q: Q, type: "product" | "supply", id: number, 
   ]);
 }
 
+/** Guarda (o borra, si viene vacío) el código de barras de un producto o insumo. */
+async function setBarcodeField(type: "product" | "supply", id: number, raw: string) {
+  const code = normalizeBarcode(raw);
+  if (code) await assignBarcode(`${type}:${id}`, code);
+  else await run(`UPDATE ${type === "product" ? "products" : "supplies"} SET barcode = '' WHERE id = ?`, [id]);
+}
+
 /** Edición rápida de un producto desde Inventario: precio, costo, existencia y mínimo. */
 export async function saveInventoryProduct(formData: FormData) {
   await requireAdmin();
@@ -419,6 +428,7 @@ export async function saveInventoryProduct(formData: FormData) {
     await q("UPDATE products SET price = ?, cost = ?, min_stock = ? WHERE id = ?", [Math.max(price, 0), Math.max(cost, 0), minStock, id]);
     if (formData.has("stock")) await setQtyWithMovement(q, "product", id, num(formData, "stock"));
   });
+  if (formData.has("barcode")) await setBarcodeField("product", id, str(formData, "barcode"));
   done();
 }
 
@@ -817,4 +827,45 @@ export async function removeCategoryPhoto(category: string) {
   await requireAdmin();
   await setCategoryPhoto(String(category), "");
   done();
+}
+
+// ---------- Códigos de barras (inventario) ----------
+
+export async function lookupBarcode(code: string): Promise<BarcodeMatch | null> {
+  await requireAdmin();
+  return findByBarcode(String(code));
+}
+
+export async function linkBarcode(item: string, code: string): Promise<BarcodeMatch | null> {
+  await requireAdmin();
+  await assignBarcode(String(item), String(code));
+  done();
+  return findByBarcode(String(code));
+}
+
+/** Crea un insumo nuevo con su código y lo que hay ahora. */
+export async function createSupplyFromBarcode(input: {
+  code: string;
+  name: string;
+  unit: string;
+  qty: number;
+  costPerUnit: number;
+  minQty: number;
+}): Promise<BarcodeMatch | null> {
+  await requireAdmin();
+  const code = normalizeBarcode(String(input.code));
+  const name = String(input.name ?? "").trim().slice(0, 80);
+  if (!code || !name) return null;
+  await run("UPDATE products SET barcode = '' WHERE barcode = ?", [code]);
+  await run("UPDATE supplies SET barcode = '' WHERE barcode = ?", [code]);
+  await run("INSERT INTO supplies (name, unit, qty, min_qty, cost_per_unit, barcode) VALUES (?,?,?,?,?,?)", [
+    name,
+    String(input.unit ?? "").trim().slice(0, 20) || "pza",
+    Math.max(0, Number(input.qty) || 0),
+    Math.max(0, Number(input.minQty) || 0),
+    Math.max(0, Math.round((Number(input.costPerUnit) || 0) * 100)),
+    code,
+  ]);
+  done();
+  return findByBarcode(code);
 }

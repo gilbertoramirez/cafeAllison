@@ -3,6 +3,8 @@ import { all } from "@/lib/db";
 import { centsToInput, dateTime, money } from "@/lib/format";
 import { productLabel, type Product, type Supply } from "@/lib/types";
 import { adjustStock, deleteSupply, restock, saveInventoryProduct, saveSupply } from "../../actions";
+import InventoryScanner from "@/components/admin/InventoryScanner";
+import { barcodeTargets } from "@/lib/barcode";
 
 const UNITS = ["pza", "kg", "g", "litro", "ml", "paquete", "caja", "bolsa", "botella", "lata", "galón", "docena"];
 
@@ -34,7 +36,7 @@ const REASON: Record<string, string> = {
 };
 
 export default async function InventoryPage() {
-  const [products, supplies, movements] = await Promise.all([
+  const [products, supplies, movements, targets] = await Promise.all([
     all<Product>("SELECT * FROM products WHERE track_stock = 1 AND active = 1 ORDER BY name"),
     all<Supply>("SELECT * FROM supplies ORDER BY name"),
     all<Movement>(
@@ -45,6 +47,7 @@ export default async function InventoryPage() {
        WHERE m.reason != 'venta'
        ORDER BY m.created_at DESC LIMIT 30`,
     ),
+    barcodeTargets(),
   ]);
   const inventoryValue =
     products.reduce((a, p) => a + Math.max(p.stock, 0) * p.cost, 0) +
@@ -80,6 +83,8 @@ export default async function InventoryPage() {
       <p className="-mt-3 text-sm text-cafe-600">
         Valor estimado del inventario: <strong>{money(inventoryValue)}</strong>
       </p>
+
+      <InventoryScanner targets={targets} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <form action={restock} className="card space-y-3">
@@ -145,9 +150,9 @@ export default async function InventoryPage() {
           <div className="divide-y divide-cafe-100">
             {products.map((p) => (
               <form
-                key={p.id}
+                key={`${p.id}-${p.stock}-${p.cost}-${p.barcode}`}
                 action={saveInventoryProduct}
-                className="grid grid-cols-2 items-end gap-2 py-3 sm:grid-cols-[minmax(10rem,1fr)_repeat(4,7rem)_auto]"
+                className="grid grid-cols-2 items-end gap-2 py-3 sm:grid-cols-[minmax(10rem,1fr)_repeat(4,7rem)_8rem_auto]"
               >
                 <input type="hidden" name="id" value={p.id} />
                 <div className="col-span-2 self-center sm:col-span-1">
@@ -173,6 +178,9 @@ export default async function InventoryPage() {
                 <Cell label="Mínimo">
                   <input name="min_stock" type="number" step="1" min="0" className="input" defaultValue={p.min_stock} />
                 </Cell>
+                <Cell label="Código de barras" className="col-span-2 sm:col-span-1">
+                  <input name="barcode" defaultValue={p.barcode} className="input font-mono text-xs" inputMode="numeric" placeholder="—" />
+                </Cell>
                 <button className="btn-secondary col-span-2 sm:col-span-1">Guardar</button>
               </form>
             ))}
@@ -193,9 +201,9 @@ export default async function InventoryPage() {
         <div className="divide-y divide-cafe-100">
           {supplies.map((s) => (
             <form
-              key={s.id}
+              key={`${s.id}-${s.qty}-${s.cost_per_unit}-${s.barcode}`}
               action={saveSupply}
-              className="grid grid-cols-2 items-end gap-2 py-3 sm:grid-cols-[minmax(10rem,1fr)_6.5rem_6rem_6rem_7rem_auto]"
+              className="grid grid-cols-2 items-end gap-2 py-3 sm:grid-cols-[minmax(10rem,1fr)_6.5rem_6rem_6rem_7rem_8rem_auto]"
             >
               <input type="hidden" name="id" value={s.id} />
               <Cell label="Nombre" className="col-span-2 sm:col-span-1">
@@ -219,6 +227,9 @@ export default async function InventoryPage() {
               </Cell>
               <Cell label="Costo/unidad ($)">
                 <input name="cost_per_unit" type="number" step="0.01" min="0" defaultValue={centsToInput(s.cost_per_unit)} className="input" />
+              </Cell>
+              <Cell label="Código de barras" className="col-span-2 sm:col-span-1">
+                <input name="barcode" defaultValue={s.barcode} className="input font-mono text-xs" inputMode="numeric" placeholder="—" />
               </Cell>
               <div className="flex items-center gap-3">
                 <button className="btn-secondary">Guardar</button>

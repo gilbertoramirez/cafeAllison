@@ -16,6 +16,8 @@ export type Product = {
   sort: number;
   /** 1 = solo se vende en la caja (no aparece en la tienda en línea) */
   pos_only: number;
+  /** código de barras (para escanear en inventario) */
+  barcode: string;
 };
 
 export type Supply = {
@@ -25,6 +27,7 @@ export type Supply = {
   qty: number;
   min_qty: number;
   cost_per_unit: number;
+  barcode: string;
 };
 
 /** "pago_pendiente": pedido con tarjeta que aún no se paga; no aparece en el panel hasta confirmarse. */
