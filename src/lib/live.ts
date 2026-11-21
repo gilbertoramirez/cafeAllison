@@ -9,7 +9,8 @@ const encoder = new TextEncoder();
 export function liveResponse(
   req: Request,
   getVersion: () => Promise<Record<string, unknown> & { v: string | number }>,
-  { intervalMs = 2000, maxMs = 50_000 } = {},
+  // 3 s: casi igual de inmediato y un tercio menos de consultas a la base de datos
+  { intervalMs = 3000, maxMs = 50_000 } = {},
 ) {
   let closed = false;
   const stream = new ReadableStream<Uint8Array>({

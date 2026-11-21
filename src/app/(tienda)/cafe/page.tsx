@@ -6,7 +6,9 @@ import { hoursText } from "@/lib/schedule";
 import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { waLink } from "@/lib/whatsapp";
 
-export const dynamic = "force-dynamic";
+// ISR: la CDN sirve esta página ya generada. Se regenera como máximo cada 60 s
+// y al instante cuando el panel guarda un cambio (revalidatePath en las acciones).
+export const revalidate = 60;
 export const metadata: Metadata = { title: "El café · Café Allison" };
 
 export default async function CafePage() {

@@ -3,7 +3,9 @@ import Link from "next/link";
 import { RewardsView } from "@/components/MyOrders";
 import { getSettings } from "@/lib/settings";
 
-export const dynamic = "force-dynamic";
+// ISR: la CDN sirve esta página ya generada. Se regenera como máximo cada 60 s
+// y al instante cuando el panel guarda un cambio (revalidatePath en las acciones).
+export const revalidate = 60;
 export const metadata: Metadata = { title: "Recompensas · Café Allison" };
 
 export default async function RewardsPage() {

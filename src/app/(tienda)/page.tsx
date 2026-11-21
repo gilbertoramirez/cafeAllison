@@ -9,7 +9,9 @@ import { getUpsellData } from "@/lib/upsell";
 import { categoryImages } from "@/lib/images";
 import { ActiveOrderBanner } from "@/components/MyOrders";
 
-export const dynamic = "force-dynamic";
+// ISR: la CDN sirve esta página ya generada. Se regenera como máximo cada 60 s
+// y al instante cuando el panel guarda un cambio (revalidatePath en las acciones).
+export const revalidate = 60;
 
 export default async function Home() {
   const [settings, products, delivery, upsell, catImages] = await Promise.all([

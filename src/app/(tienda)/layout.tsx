@@ -3,7 +3,9 @@ import StoreTabs from "@/components/StoreTabs";
 import { getSettings } from "@/lib/settings";
 import { hoursText, isOpenNow, nextOpening } from "@/lib/schedule";
 
-export const dynamic = "force-dynamic";
+// ISR: la CDN sirve esta página ya generada. Se regenera como máximo cada 60 s
+// y al instante cuando el panel guarda un cambio (revalidatePath en las acciones).
+export const revalidate = 60;
 
 /** Marco de la tienda para clientes: encabezado compacto + pestañas abajo. */
 export default async function StoreLayout({ children }: LayoutProps<"/">) {

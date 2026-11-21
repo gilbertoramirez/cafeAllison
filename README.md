@@ -60,6 +60,19 @@ La app usa **Postgres**. En Vercel la base de datos es **Neon** (tiene plan grat
 
 Sin `DATABASE_URL`, en tu computadora se usa **PGlite** (Postgres embebido, guardado en `data/pglite`), así que no necesitas instalar nada para probar. En Vercel sin `DATABASE_URL` funciona en modo demo con datos temporales (el panel lo avisa).
 
+## Caché (para gastar menos en Vercel)
+
+- **Tienda** (`/`, `/cafe`, `/recompensas`, `/pedidos`): ISR con `revalidate = 60`. La CDN de Vercel
+  sirve la página ya hecha (`s-maxage=60, stale-while-revalidate=240`; `expireTime: 300` en
+  `next.config.ts`). Cada cambio guardado en el panel llama a `revalidatePath("/", "layout")`
+  (`done()` en `src/app/admin/actions.ts`), así que el menú, precios y horario se actualizan al
+  instante. Lo que depende de la hora (Abierto/Cerrado) puede tardar hasta 1 minuto.
+- **Privado** (`/api/*` salvo `/api/foto`, `/admin`, `/repartidor`, `/pedido/[token]`):
+  `Cache-Control: private, no-store` desde `headers()` en `next.config.ts`.
+- **Fotos** (`/api/foto`): `public, max-age=31536000, immutable` (cada foto tiene nombre único).
+- **Tiempo real**: el panel solo mantiene la conexión mientras la pantalla se ve, y consulta cada 3 s.
+- Para forzar que la tienda se regenere sin cambiar nada, guarda cualquier ajuste en el panel.
+
 ## Cómo se calculan las ganancias
 
 - **Utilidad bruta** = ventas cobradas − costo de los productos vendidos (el campo *Costo* de cada producto).

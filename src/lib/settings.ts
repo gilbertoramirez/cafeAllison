@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { DeliveryRules } from "./delivery";
 import type { OnlineFeeRules } from "./fees";
 import type { LoyaltySettings } from "./loyaltyRules";
@@ -33,7 +34,8 @@ export type Settings = {
   schedule: ScheduleRules;
 };
 
-export async function getSettings(): Promise<Settings> {
+/** Una sola consulta por petición aunque la pidan el layout y la página (cache de React). */
+export const getSettings = cache(async function getSettings(): Promise<Settings> {
   const rows = await all<{ key: string; value: string }>("SELECT key, value FROM settings");
   const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   return {
@@ -81,7 +83,7 @@ export async function getSettings(): Promise<Settings> {
       pos: m.ntfy_pos === "1",
     },
   };
-}
+});
 
 export async function setSetting(key: string, value: string) {
   await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [

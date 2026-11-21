@@ -109,10 +109,11 @@ export default function LiveUpdates({ url, mode }: { url: string; mode: "admin" 
       const t = setInterval(() => router.refresh(), 15000);
       return () => clearInterval(t);
     }
-    const es = new EventSource(url);
-    es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false); // EventSource se reconecta solo
-    es.onmessage = (ev) => {
+    // Solo se conecta mientras la pantalla se ve: con la pantalla apagada o en otra app no mantiene
+    // una función encendida en el servidor. Al volver se reconecta y, si hubo cambios, actualiza
+    // (y suena / imprime lo que llegó mientras tanto).
+    let es: EventSource | null = null;
+    const onMessage = (ev: MessageEvent) => {
       let msg: Msg;
       try {
         msg = JSON.parse(ev.data);
@@ -142,7 +143,25 @@ export default function LiveUpdates({ url, mode }: { url: string; mode: "admin" 
         setToast("¡Pago recibido! 💳");
       }
     };
-    return () => es.close();
+    const open = () => {
+      if (es) return;
+      es = new EventSource(url);
+      es.onopen = () => setConnected(true);
+      es.onerror = () => setConnected(false); // EventSource se reconecta solo
+      es.onmessage = onMessage;
+    };
+    const close = () => {
+      es?.close();
+      es = null;
+      setConnected(false);
+    };
+    const onVisibility = () => (document.visibilityState === "hidden" ? close() : open());
+    if (document.visibilityState !== "hidden") open();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      close();
+    };
   }, [url, mode, router]);
 
   useEffect(() => {
