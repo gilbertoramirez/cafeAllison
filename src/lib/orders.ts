@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { all, get, transaction } from "./db";
 import { availableToday } from "./format";
 import { notifyOrder } from "./notify";
+import { applyDuePriceChanges } from "./priceChanges";
 import { awardStamp, claimRewardForUpdate, revokeLoyaltyForOrder } from "./loyalty";
 import { FREE_NOTE, normalizePhone, pickFreeLine } from "./loyaltyRules";
 import type { Order, OrderItem, OrderStatus, PaymentMethod, Product } from "./types";
@@ -51,6 +52,7 @@ export type NewOrderInput = {
  * y descuenta inventario de los productos con control de stock.
  */
 export async function createOrder(input: NewOrderInput): Promise<Order> {
+  await applyDuePriceChanges(); // si ya tocaba un precio nuevo, se cobra el nuevo
   // Agrupa por producto + indicaciones (p.ej. dos frappés de sabores distintos son dos líneas)
   const merged = new Map<string, { productId: number; qty: number; note: string }>();
   const perProduct = new Map<number, number>();

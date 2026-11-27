@@ -232,6 +232,19 @@ CREATE TABLE IF NOT EXISTS drivers (
 );
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS driver_id INTEGER;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_for TEXT;
+CREATE TABLE IF NOT EXISTS price_changes (
+  id SERIAL PRIMARY KEY,
+  product_id INTEGER,
+  label TEXT NOT NULL,
+  old_price INTEGER,
+  new_price INTEGER,
+  new_cost INTEGER,
+  effective_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pendiente',
+  applied_at TEXT,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS cash_sessions (
   id SERIAL PRIMARY KEY,
   opened_at TEXT NOT NULL,

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cancelPriceChange, schedulePriceChange } from "@/lib/priceChanges";
 import { redirect } from "next/navigation";
 import {
   checkPassword,
@@ -217,6 +218,10 @@ export async function saveProduct(formData: FormData) {
     );
     // Foto nueva o quitada: se aplica a todos los tamaños y se borra la anterior si ya nadie la usa
     if (prev && prev.image_url !== imageUrl) await setProductPhoto(id, imageUrl);
+    // Precio nuevo programado (ej. aumento a partir del 1 de enero)
+    const futurePrice = toCents(formData.get("future_price"));
+    const futureDay = str(formData, "future_day");
+    if (futurePrice > 0 && /^\d{4}-\d{2}-\d{2}$/.test(futureDay)) await schedulePriceChange(id, futurePrice, futureDay);
   } else {
     // Un tamaño nuevo de un producto que ya tiene foto la hereda
     const sibling = imageUrl
@@ -231,6 +236,12 @@ export async function saveProduct(formData: FormData) {
   }
   done();
   redirect("/admin/productos");
+}
+
+export async function cancelScheduledPrice(id: number) {
+  await requireAdmin();
+  await cancelPriceChange(Number(id));
+  done();
 }
 
 export async function toggleProduct(id: number) {

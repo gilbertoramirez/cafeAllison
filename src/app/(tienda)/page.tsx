@@ -5,6 +5,7 @@ import { getDeliveryRules, getSettings, stripeEnabled } from "@/lib/settings";
 import { availableToday } from "@/lib/format";
 import { daysLabel, type Product } from "@/lib/types";
 import Shop from "@/components/Shop";
+import { applyDuePriceChanges } from "@/lib/priceChanges";
 import { getUpsellData } from "@/lib/upsell";
 import { categoryImages } from "@/lib/images";
 import { ActiveOrderBanner } from "@/components/MyOrders";
@@ -14,6 +15,7 @@ import { ActiveOrderBanner } from "@/components/MyOrders";
 export const revalidate = 60;
 
 export default async function Home() {
+  await applyDuePriceChanges(); // precios programados que ya tocan
   const [settings, products, delivery, upsell, catImages] = await Promise.all([
     getSettings(),
     all<Product>(

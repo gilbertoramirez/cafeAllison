@@ -1,20 +1,25 @@
 import Link from "next/link";
 import { Field, PageTitle } from "@/components/admin/ui";
 import { all, get } from "@/lib/db";
-import { centsToInput, money } from "@/lib/format";
+import { centsToInput, dateTime, money } from "@/lib/format";
 import { daysLabel, parseDays, productLabel, WEEKDAYS, type Product } from "@/lib/types";
-import { saveProduct, toggleProduct } from "../../actions";
+import { cancelScheduledPrice, saveProduct, toggleProduct } from "../../actions";
+import { applyDuePriceChanges, listPriceChanges } from "@/lib/priceChanges";
 import ProductPhotoInput, { CategoryPhotoInput } from "@/components/admin/ProductPhotoInput";
 import { iconFor } from "@/lib/categoryIcons";
 import { blobEnabled, categoryImages } from "@/lib/images";
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ id?: string; nuevo?: string }> }) {
   const sp = await searchParams;
+  await applyDuePriceChanges();
   const products = await all<Product>("SELECT * FROM products ORDER BY (SELECT MIN(p2.sort) FROM products p2 WHERE p2.category = products.category), category, sort, name");
   const editing = sp.id ? await get<Product>("SELECT * FROM products WHERE id = ?", [Number(sp.id)]) : undefined;
   const showForm = Boolean(editing || sp.nuevo);
   const categories = [...new Set(products.map((p) => p.category))];
-  const catImages = await categoryImages();
+  const [catImages, changes] = await Promise.all([categoryImages(), listPriceChanges()]);
+  const pending = changes.filter((c) => c.status === "pendiente");
+  const STATUS: Record<string, string> = { pendiente: "⏰ Pendiente", aplicado: "✓ Aplicado", cancelado: "Cancelado", no_encontrado: "⚠️ No se encontró" };
+  const editingPending = editing ? pending.find((c) => c.product_id === editing.id) : undefined;
   // Categorías que se ven en la tienda y la foto de producto que usarían si no tienen una propia
   const storeCategories = [...new Set(products.filter((p) => p.active && !p.pos_only).map((p) => p.category))];
   const productPhoto = (c: string) => products.find((p) => p.category === c && p.active && !p.pos_only && p.image_url)?.image_url ?? "";
@@ -22,6 +27,55 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   return (
     <div className="space-y-5">
       <PageTitle actions={<Link href="?nuevo=1" className="btn-primary">+ Agregar producto</Link>}>Menú</PageTitle>
+
+      {changes.length > 0 && (
+        <details className="card" open={pending.length > 0}>
+          <summary className="cursor-pointer font-semibold">
+            ⏰ Cambios de precio programados {pending.length > 0 && `(${pending.length} pendientes)`}
+          </summary>
+          <p className="mt-2 text-sm text-cafe-600">
+            Se aplican solos en la fecha indicada (00:00, hora de México). Puedes cancelar los pendientes. Para programar otro, edita
+            el producto y llena “Precio nuevo programado”. El costo solo se llena si el producto no tenía.
+          </p>
+          <div className="mt-2 overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Desde</th>
+                  <th>Producto</th>
+                  <th className="text-right">Precio</th>
+                  <th className="text-right">Costo</th>
+                  <th>Estado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {changes.map((c) => {
+                  const before = c.status === "aplicado" ? c.old_price : c.current_price;
+                  return (
+                    <tr key={c.id} className={c.status === "cancelado" ? "opacity-50" : ""}>
+                      <td className="whitespace-nowrap">{dateTime(c.effective_at).split(",")[0]}</td>
+                      <td>{c.label}</td>
+                      <td className="text-right whitespace-nowrap tabular-nums">
+                        {c.new_price == null ? "—" : `${before != null ? `${money(before)} → ` : ""}${money(c.new_price)}`}
+                      </td>
+                      <td className="text-right tabular-nums">{c.new_cost == null ? "—" : money(c.new_cost)}</td>
+                      <td className="whitespace-nowrap">{STATUS[c.status] ?? c.status}</td>
+                      <td className="text-right">
+                        {c.status === "pendiente" && (
+                          <form action={cancelScheduledPrice.bind(null, c.id)}>
+                            <button className="text-xs text-red-700 underline">Cancelar</button>
+                          </form>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
 
       <details className="card">
         <summary className="cursor-pointer font-semibold">🖼️ Fotos de las categorías (los círculos de la tienda)</summary>
@@ -75,6 +129,19 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           <Field label="Costo por unidad ($)" hint="Lo que te cuesta prepararlo. Se usa para calcular la ganancia.">
             <input name="cost" type="number" step="0.01" min="0" className="input" defaultValue={editing ? centsToInput(editing.cost) : ""} />
           </Field>
+          {editing && (
+            <>
+              <Field
+                label="Precio nuevo programado ($)"
+                hint={editingPending ? `Ya hay uno: ${money(editingPending.new_price ?? 0)} desde ${dateTime(editingPending.effective_at).split(",")[0]}. Uno nuevo lo reemplaza.` : "Opcional. Cambia solo en la fecha que elijas."}
+              >
+                <input name="future_price" type="number" step="0.01" min="0" className="input" />
+              </Field>
+              <Field label="A partir del día">
+                <input name="future_day" type="date" className="input" />
+              </Field>
+            </>
+          )}
           <Field label="Foto (opcional)" hint="Cuadrada y con fondo limpio se ve mejor. Se usa en todos los tamaños." className="col-span-2">
             <ProductPhotoInput
               productId={editing?.id ?? null}
