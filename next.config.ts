@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
     ];
   },
   // PGlite trae archivos .wasm/.data que se cargan en tiempo de ejecución
-  serverExternalPackages: ["@electric-sql/pglite"],
+  serverExternalPackages: ["@electric-sql/pglite", "exceljs"],
   outputFileTracingIncludes: {
     "/**": ["./node_modules/@electric-sql/pglite/dist/*.wasm", "./node_modules/@electric-sql/pglite/dist/*.data"],
   },

@@ -20,6 +20,27 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     <div className="space-y-6">
       <PageTitle actions={<PeriodTabs current={periodo} base="/admin/finanzas" />}>Finanzas · {range.label}</PageTitle>
 
+      <section className="card flex flex-wrap items-end gap-3 text-sm">
+        <div className="min-w-0 flex-1">
+          <h2 className="font-semibold">📊 Exportar ventas a Excel</h2>
+          <p className="text-cafe-600">Resumen, cada venta, cada producto vendido y totales por producto.</p>
+        </div>
+        <a href={`/api/admin/ventas?periodo=${periodo}`} className="btn-primary" download>
+          📥 Descargar {range.label.toLowerCase()}
+        </a>
+        <form action="/api/admin/ventas" method="get" className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[11px] font-medium text-cafe-600">Desde</span>
+            <input type="date" name="desde" defaultValue={range.from} className="input" required />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[11px] font-medium text-cafe-600">Hasta</span>
+            <input type="date" name="hasta" defaultValue={range.to} className="input" required />
+          </label>
+          <button className="btn-secondary">Descargar fechas</button>
+        </form>
+      </section>
+
       <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
         <Stat
           label="Ventas"
